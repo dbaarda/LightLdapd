@@ -39,21 +39,18 @@ Contents
    distribution. It should include a list of important features in a
    table like this;
 
-========== ======================================================
+=============== ======================================================
 Name       Description
-========== ======================================================
-README     This file.
-INSTALL    Installation instructions.
-COPYING    Copyright and Licencing details.
-AUTHORS    The main project authors.
-THANKS     All the project contributors.
-NEWS       Summary of fixes and changes for each release.
-TODO       List of outstanding tasks and future plans.
-ChangeLog  Detailed development change history.
-doc/       Contains project documentation.
-src/       Contains project source code.
-tests/     Contains project unit and functional tests.
-========== ======================================================
+=============== ======================================================
+README.rst      This file.
+DESIGN.rst      Details of the design.
+DEVELOPMENT.rst Instructions for developers.
+LICENSE         Copyright and Licencing details.
+NEWS.rst        Summary of fixes and changes for each release.
+TODO.rst        List of outstanding tasks and future plans.
+ldap.asn1       The asn1 ldap protocol specification.
+*.[ch]          The project source code.
+=============== ======================================================
 
 .. It wouldn't hurt to have a few paragraphs here suggesting were to
    look in the distribution for bits and pieces.
@@ -90,18 +87,18 @@ Usage
 
 ::
 
-    entente [options]
+    lightldapd [options]
 
 Or::
 
-    /etc/init.d/entente start
-    # config file: /etc/default/entente
+    /etc/init.d/lightldapd start
+    # config file: /etc/default/lightldapd
 
 Options
 -------
 
 -a  Allow anonymous access.
--b basedn  Set the basedn for the ldap server (default: "dc=entente").
+-b basedn  Set the basedn for the ldap server (default: "dc=lightldapd").
 -l  Bind to the loopback interface only.
 -p port  Set local port number (default: 389).
 -d  Run as a daemon.
@@ -121,7 +118,7 @@ lighttpd.conf::
     auth.require = (
         "/tratata" => (
             "method"  => "basic",
-            "realm"   => "entente",
+            "realm"   => "lightldapd",
             "require" => "user=kiki|user=ooki"
         ),
     )

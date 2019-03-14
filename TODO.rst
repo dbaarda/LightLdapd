@@ -18,12 +18,8 @@ Items
 * Change license from MIT to GPL?
 
   Would prefer to require contributions to come back rather than spawn private
-  forks. Need to contact entente author to check this is OK.
+  forks. I have confirmed with the entente author this is OK.
   
-* Change name from entente to lightldapd.
-
-  Forked project is now LightLdpad, need to make binary and cfgs match.
-
 * Tidy code.
 
   Reformat again using a different common style? I'm not keen on tabs.

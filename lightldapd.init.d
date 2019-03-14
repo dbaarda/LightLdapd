@@ -1,6 +1,6 @@
 #!/bin/sh
 ### BEGIN INIT INFO
-# Provides:          entente
+# Provides:          lightldapd
 # Required-Start:    $remote_fs $syslog
 # Required-Stop:     $remote_fs $syslog
 # Default-Start:     2 3 4 5
@@ -12,7 +12,7 @@
 
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC="ldap server"
-NAME=entente
+NAME=lightldapd
 DAEMON=/usr/sbin/$NAME
 DAEMON_OPTS="-d -l"
 SCRIPTNAME=/etc/init.d/$NAME

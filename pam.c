@@ -29,7 +29,7 @@ int auth_pam(const char *user, const char *pw, char **msg, double *delay)
 	conv_info.conv = &auth_pam_conv;
 	conv_info.appdata_ptr = (void *)&data;
 	/* Start pam. */
-	if (PAM_SUCCESS != (pam_res = pam_start("entente", user, &conv_info, &pamh))) {
+	if (PAM_SUCCESS != (pam_res = pam_start("lightldapd", user, &conv_info, &pamh))) {
 		snprintf(status, sizeof(status), "PAM: Could not start pam service: %s\n", pam_strerror(pamh, pam_res));
 	} else {
 		/* Set failure delay handler function. */

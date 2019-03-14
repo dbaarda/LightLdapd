@@ -1,8 +1,8 @@
-# Whether or not to run entente; set to 0 to disable.
+# Whether or not to run lightldapd; set to 0 to disable.
 ENABLED=1
 
 # Set the BASEDN to use.
-BASEDN="dc=entente"
+BASEDN="dc=lightldapd"
 
 # Set the options to use.
 DAEMON_OPTS="-d -b $BASEDN -p 389 -l -a"

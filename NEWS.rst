@@ -8,13 +8,18 @@ ensure that things are moved to here from the TODO file as they get
 done. Before doing a release please ensure that this document is up to
 date.
 
-Changes in 1.0 (Not released yet)
-=================================
+Changes in 1.0.0 (Not released yet)
+===================================
 
 * Forked LightLdapd project from entente.
 
   With permission and thanks to Sergey Urbanovich, the author of
   entente.
+
+* Changed name from entente to lightldapd.
+
+  The forked project is now named LightLdapd, and the binary and cfgs
+  have been renamed to lightldapd.
 
 
 Changes in entente 1.1 (merged 2014-01-25)

@@ -10,17 +10,17 @@ these procedures.
 Testing
 =======
 
-To build entente with debug output turned on use::
+To build lightldapd with debug output turned on use::
 
   make debug
 
-When running entente for tesing use::
+When running lightldapd for tesing use::
 
-  sudo ./entente -l -a
+  sudo ./lightldapd -l -a
 
 When searching with ldapsearch, you should use::
 
-  ldapsearch "uid=abo" -b "dc=entente" -h localhost -v -x -D "uid=abo,dc=entente" -W
+  ldapsearch "uid=abo" -b "dc=lightldapd" -h localhost -v -x -D "uid=abo,dc=lightldapd" -W
 
 Where the arguments provided are:
 

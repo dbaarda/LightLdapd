@@ -1,4 +1,4 @@
-TARGET=entente
+TARGET=lightldapd
 CC=gcc
 AR=ar
 CFLAGS=-Wall -Wextra -fno-strict-aliasing
@@ -33,7 +33,7 @@ install:
 	cp $(TARGET).default $(DESTDIR)/etc/default/$(TARGET)
 
 debian:
-	dpkg-buildpackage -rfakeroot
+	dpkg-buildpackage -rfakeroot -I.*
 
 debclean:
 	debian/rules clean

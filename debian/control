@@ -1,13 +1,17 @@
-Source: entente
+Source: lightldapd
 Section: admin
 Priority: optional
-Maintainer: Sergey Urbanovich <sergey.urbanovich@gmail.com>
+Maintainer: Donovan Baarda <abo@minkirri.apana.org.au>
 Build-Depends: asn1c (>= 0.9), debhelper (>> 5), libev-dev (>= 3.0), libpam0g-dev (>= 0.99.7.1)
 Standards-Version: 3.8.4
 
-Package: entente
+Package: lightldapd
 Architecture: any
 Depends: ${shlibs:Depends}
-Homepage: http://meow.tratata.org/
-Description: Simplest ldap server with authentication via pam
- Simplest ldap server with authentication via pam.
+Homepage: https://github.com/dbaarda/LightLdapd
+Description: Tiny LDAP server exporting NSS databases using PAM authentication.
+ LightLdapd is a small and easy to manage LDAP server for small
+ home/classroom/school sized networks that can include thin clients. It
+ is designed to provide network wide users/groups/etc support to
+ supplement the excellent network dns/dhcp/tftp support provided by
+ dnsmasq.

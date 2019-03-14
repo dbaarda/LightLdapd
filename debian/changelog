@@ -1,6 +1,13 @@
+lightldapd (1.0.0-1) experimental; urgency=low
+
+  * Forked from entente with permission.
+
+  * Changed name from entente to lightldapd.
+
+ -- Donovan Baarda (abo) <abo@minkirri.apana.org.au>  Tue, 12 Mar 2019 14:23:00 +1100
+
 entente (0.1-1) experimental; urgency=low
 
   * Initial Release.
 
  -- Sergey Urbanovich <sergey.urbanovich@gmail.com>  Sat, 11 Dec 2010 02:43:00 +0300
-

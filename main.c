@@ -73,7 +73,7 @@ ldap_status_t ldap_request_reply(ldap_connection *connection, LDAPMessage_t *req
 ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequest_t *req);
 ldap_status_t ldap_request_search(ldap_connection *connection, int msgid, SearchRequest_t *req);
 
-char *setting_basedn = "dc=entente";
+char *setting_basedn = "dc=lightldapd";
 int setting_port = 389;
 int setting_daemon = 0;
 int setting_loopback = 0;
@@ -469,7 +469,7 @@ void settings(int argc, char **argv)
 			setting_port = atoi(optarg);
 			break;
 		default:
-			fprintf(stderr, "Usage: %s [-a] [-b dc=entente] [-l] [-p 389] [-d]\n", argv[0]);
+			fprintf(stderr, "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d]\n", argv[0]);
 			exit(1);
 		}
 	}

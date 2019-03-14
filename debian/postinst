@@ -5,7 +5,7 @@ umask 0022
 
 . /usr/share/debconf/confmodule
 
-update-rc.d entente defaults 90 > /dev/null
-invoke-rc.d entente start
+update-rc.d lightldapd defaults 90 > /dev/null
+invoke-rc.d lightldapd start
 
 db_stop

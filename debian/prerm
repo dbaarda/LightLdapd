@@ -1,5 +1,5 @@
 #!/bin/sh -e
 
-if [ -x /etc/init.d/entente ]; then
-	invoke-rc.d entente stop
+if [ -x /etc/init.d/lightldapd ]; then
+	invoke-rc.d lightldapd stop
 fi
