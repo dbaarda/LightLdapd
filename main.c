@@ -371,16 +371,15 @@ ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequ
 		/* simple auth */
 		char user[PWNAME_MAX];
 		char *pw = (char *)req->authentication.choice.simple.buf;
-		char *status = NULL;
+		char status[PAMMSG_LEN] = "";
 		if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
 			bindResponse->resultCode = BindResponse__resultCode_invalidDNSyntax;
-		} else if (PAM_SUCCESS != auth_pam(user, pw, &status, &delay)) {
+		} else if (PAM_SUCCESS != auth_pam(user, pw, status, &delay)) {
 			bindResponse->resultCode = BindResponse__resultCode_invalidCredentials;
 			LDAPString_set(&bindResponse->diagnosticMessage, status);
 		} else {	/* Success! */
 			bindResponse->resultCode = BindResponse__resultCode_success;
 		}
-		free(status);
 	} else {
 		/* sasl or anonymous auth */
 		bindResponse->resultCode = BindResponse__resultCode_authMethodNotSupported;
