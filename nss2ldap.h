@@ -9,8 +9,8 @@
 #include <pwd.h>
 #include "asn1/LDAPMessage.h"
 
-#define PWNAME_MAX 32   /**< The max length of a username string. */
-#define STRING_MAX 256  /**< The max length of an LDAPString. */
+#define PWNAME_MAX 32           /**< The max length of a username string. */
+#define STRING_MAX 256          /**< The max length of an LDAPString. */
 
 /** Destroy and free an LDAPMessage instance. */
 #define ldapmessage_free(msg) ASN_STRUCT_FREE(asn_DEF_LDAPMessage, msg)
@@ -46,8 +46,8 @@ char *name2dn(const char *basedn, const char *name, char *dn);
 
 /** Return the name from a full "uid=<name>,<basedn>" ldap dn.
  *
- * This checks that the dn provided is in the valid form with the
- * right basedn and returns NULL if it is invalid.
+ * This checks that the dn provided is in the valid form with the right basedn
+ * and returns NULL if it is invalid.
  *
  * \param basedn - the ldap basedn string expected.
  *
@@ -78,4 +78,4 @@ void passwd2ldap(SearchResultEntry_t *res, const char *basedn, passwd_t *pw);
  * \return 0 if successful, -1 if there was no such user. */
 int getpwnam2ldap(SearchResultEntry_t *res, const char *basedn, const char *name);
 
-#endif  /* LIGHTLDAPD_NSS2LDAP_H */
+#endif                          /* LIGHTLDAPD_NSS2LDAP_H */

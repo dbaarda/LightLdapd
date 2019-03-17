@@ -3,7 +3,6 @@ CC=gcc
 AR=ar
 CFLAGS=-Wall -Wextra -fno-strict-aliasing
 LDFLAGS=-lev -lpam
-TYPE_RE='\(ev\|ldap\)_[^ ]\+\|[^ ]\+_t'
 
 .PHONY: all debug clean install debian debclean tidy
 
@@ -39,9 +38,5 @@ debclean:
 	debian/rules clean
 
 tidy:
-	# Tidy code using indent.
-	indent -linux -l120 *.c
-	# Remove struct prefix from userdefined types.
-	sed -i 's/struct \('$(TYPE_RE)' \)/\1/g' *.c
-	# Remove space between * and identifier for userdefined types.
-	sed -i 's/\([( \t]\('$(TYPE_RE)'\) \*\+\) /\1/g' *.c
+	# Reformat all code and comments to preferred coding style."
+	tidyc -ppi0 -R -C -T '/ev_\w+/' -T '/ldap_\w+/' *.[ch]

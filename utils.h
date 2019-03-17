@@ -20,4 +20,4 @@
 #define XSTRDUP(s) ({char *_s=strdup(s); if (!_s) err(EX_OSERR, "strdup"); _s;})
 #define XSTRNDUP(s, n) ({char *_s=strndup(s,n); if (!_s) err(EX_OSERR, "strndup"); _s;})
 
-#endif /* LIGHTLDAPD_UTILS_H */
+#endif                          /* LIGHTLDAPD_UTILS_H */
