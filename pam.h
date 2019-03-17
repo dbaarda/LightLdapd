@@ -1,4 +1,4 @@
-/**
+/*=
  * Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
  *
  * Licensed under the MIT License. See LICENSE file for details.
@@ -18,8 +18,11 @@
  * client.
  *
  * \param user - the user name string to authenticate,
+ *
  * \param *pw - the password string to authenticate with.
+ *
  * \param *msg - a char[PAMMSG_LEN] string for failure messages.
+ *
  * \param *delay - the seconds to delay for failed auth attempts.
  *
  * \return a PAM result code from security/pam_appl.h. */

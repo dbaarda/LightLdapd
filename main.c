@@ -1,4 +1,4 @@
-/**
+/*=
  * Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
  * Based on entente Copyright (c) 2010, 2011 Sergey Urbanovich
  *
