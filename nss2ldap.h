@@ -67,7 +67,7 @@ char *dn2name(const char *basedn, const char *dn, char *name);
  * \param pw - the nss passwd entry. */
 void passwd2ldap(SearchResultEntry_t *res, const char *basedn, passwd_t *pw);
 
-/* Set a SearchResultEntry from an nss user's name.
+/** Set a SearchResultEntry from an nss user's name.
  *
  * \param res - the SearchResultEntry to set.
  *
