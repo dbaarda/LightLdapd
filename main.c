@@ -227,8 +227,7 @@ ldap_status_t ldap_connection_send(ldap_connection *connection, LDAPMessage_t *m
     asn_enc_rval_t rencode;
 
     rencode = der_encode_to_buffer(&asn_DEF_LDAPMessage, msg, buffer_wpos(buf), buffer_wlen(buf));
-    /* If it failed, the buffer was probably full, return RC_WMORE to say try
-       again next time. */
+    /* If it failed the buffer was full, return RC_WMORE to try again. */
     if (rencode.encoded == -1)
         return RC_WMORE;
     buffer_appended(buf, rencode.encoded);
@@ -241,8 +240,7 @@ ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **
     buffer_t *buf = &connection->recv_buf;
     asn_dec_rval_t rdecode;
 
-    /* from asn1c's FAQ: If you want data to be BER or DER encoded, just invoke
-       der_encode(). */
+    /* from asn1c's FAQ: If you want BER or DER encoding, use der_encode(). */
     rdecode = ber_decode(0, &asn_DEF_LDAPMessage, (void **)msg, buffer_rpos(buf), buffer_rlen(buf));
     buffer_consumed(buf, rdecode.consumed);
     if (rdecode.code == RC_FAIL) {
@@ -354,8 +352,7 @@ ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequ
     LDAPMessage_t *res = connection->response;
     ev_tstamp delay = 0.0;
 
-    /* If the delay is active, do nothing and return RC_WMORE to say try again.
-     */
+    /* If the delay is active, do nothing and return RC_WMORE to try again. */
     if (ev_is_active(&connection->delay_watcher))
         return RC_WMORE;
     /* If we have already built the response, just try to send it. */
