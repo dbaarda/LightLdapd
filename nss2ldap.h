@@ -7,6 +7,7 @@
 #define LIGHTLDAPD_NSS2LDAP_H
 #include <sys/types.h>
 #include <pwd.h>
+#include <stdbool.h>
 #include "asn1/LDAPMessage.h"
 
 #define PWNAME_MAX 32           /**< The max length of a username string. */
@@ -77,5 +78,21 @@ void passwd2ldap(SearchResultEntry_t *res, const char *basedn, passwd_t *pw);
  *
  * \return 0 if successful, -1 if there was no such user. */
 int getpwnam2ldap(SearchResultEntry_t *res, const char *basedn, const char *name);
+
+/** Check if a Filter is fully supported.
+ *
+ * \param filter - The the Filter to check.
+ *
+ * \return true if the filter is supported, otherwise false. */
+bool Filter_ok(const Filter_t *filter);
+
+/** Check if a Filter matches a SearchResultEntry.
+ *
+ * \param filter - The the Filter to use.
+ *
+ * \param res - the SearchResultEntry to test.
+ *
+ * \return true if res matches filter, otherwise false. */
+bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *res);
 
 #endif                          /* LIGHTLDAPD_NSS2LDAP_H */

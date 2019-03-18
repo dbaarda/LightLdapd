@@ -54,6 +54,20 @@ static PartialAttribute_t *SearchResultEntry_add(SearchResultEntry_t *res, const
     return a;
 }
 
+/* Get a PartialAttribute from a SearchResultEntry. */
+static const PartialAttribute_t *SearchResultEntry_get(const SearchResultEntry_t *res, const char *type)
+{
+    assert(res);
+    assert(type);
+
+    for (int i = 0; i < res->attributes.list.count; i++) {
+        const PartialAttribute_t *attr = res->attributes.list.array[i];
+        if (strcmp((const char *)attr->type.buf, type))
+            return attr;
+    }
+    return NULL;
+}
+
 /* Get the cn from the first field of a gecos entry. */
 char *gecos2cn(const char *gecos, char *cn)
 {
@@ -134,4 +148,81 @@ int getpwnam2ldap(SearchResultEntry_t *res, const char *basedn, const char *name
         return -1;
     passwd2ldap(res, basedn, pw);
     return 0;
+}
+
+bool Filter_ok(const Filter_t *filter)
+{
+    assert(filter);
+
+    switch (filter->present) {
+    case Filter_PR_and:
+        for (int i = 0; i < filter->choice.And.list.count; i++)
+            if (!Filter_ok(filter->choice.And.list.array[i]))
+                return false;
+        return true;
+    case Filter_PR_or:
+        for (int i = 0; i < filter->choice.Or.list.count; i++)
+            if (!Filter_ok(filter->choice.Or.list.array[i]))
+                return false;
+        return true;
+    case Filter_PR_not:
+        return Filter_ok(filter->choice.Not);
+    case Filter_PR_equalityMatch:
+        return true;
+    case Filter_PR_present:
+    case Filter_PR_substrings:
+    case Filter_PR_greaterOrEqual:
+    case Filter_PR_lessOrEqual:
+    case Filter_PR_approxMatch:
+    case Filter_PR_extensibleMatch:
+    default:
+        return false;
+    }
+}
+
+/* Check if an AttributeValueAssertion is equal to a SearchResultEntry */
+bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal, const SearchResultEntry_t *res)
+{
+    assert(equal);
+    assert(res);
+    const char *name = (const char *)equal->attributeDesc.buf;
+    const char *value = (const char *)equal->assertionValue.buf;
+    const PartialAttribute_t *attr = SearchResultEntry_get(res, name);
+
+    if (attr)
+        for (int i = 0; i < attr->vals.list.count; i++)
+            if (strcmp((const char *)attr->vals.list.array[i]->buf, value))
+                return true;
+    return false;
+}
+
+bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *res)
+{
+    assert(filter);
+    assert(res);
+
+    switch (filter->present) {
+    case Filter_PR_and:
+        for (int i = 0; i < filter->choice.And.list.count; i++)
+            if (!Filter_matches(filter->choice.And.list.array[i], res))
+                return false;
+        return true;
+    case Filter_PR_or:
+        for (int i = 0; i < filter->choice.Or.list.count; i++)
+            if (Filter_matches(filter->choice.Or.list.array[i], res))
+                return true;
+        return false;
+    case Filter_PR_not:
+        return !Filter_matches(filter->choice.Not, res);
+    case Filter_PR_equalityMatch:
+        return AttributeValueAssertion_equal(&filter->choice.equalityMatch, res);
+    case Filter_PR_present:
+    case Filter_PR_substrings:
+    case Filter_PR_greaterOrEqual:
+    case Filter_PR_lessOrEqual:
+    case Filter_PR_approxMatch:
+    case Filter_PR_extensibleMatch:
+    default:
+        return false;
+    }
 }
