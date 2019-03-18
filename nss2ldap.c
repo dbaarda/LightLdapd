@@ -168,8 +168,8 @@ bool Filter_ok(const Filter_t *filter)
     case Filter_PR_not:
         return Filter_ok(filter->choice.Not);
     case Filter_PR_equalityMatch:
-        return true;
     case Filter_PR_present:
+        return true;
     case Filter_PR_substrings:
     case Filter_PR_greaterOrEqual:
     case Filter_PR_lessOrEqual:
@@ -217,6 +217,7 @@ bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *res)
     case Filter_PR_equalityMatch:
         return AttributeValueAssertion_equal(&filter->choice.equalityMatch, res);
     case Filter_PR_present:
+        return SearchResultEntry_get(res, (const char *)filter->choice.present.buf) != NULL;
     case Filter_PR_substrings:
     case Filter_PR_greaterOrEqual:
     case Filter_PR_lessOrEqual:
