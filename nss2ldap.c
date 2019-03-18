@@ -7,6 +7,102 @@
 #include "nss2ldap.h"
 #include "utils.h"
 
+void ldap_response_init(ldap_response *res, int size)
+{
+    assert(res);
+    assert(size > 0);
+
+    res->count = 0;
+    res->next = 0;
+    res->size = size;
+    res->msgs = XNEW0(LDAPMessage_t *, size);
+}
+
+void ldap_response_done(ldap_response *res)
+{
+    assert(res);
+
+    for (int i = 0; i < res->count; i++)
+        ldapmessage_free(res->msgs[i]);
+    free(res->msgs);
+}
+
+LDAPMessage_t *ldap_response_add(ldap_response *res)
+{
+    assert(res);
+
+    /* Double the allocated size if full. */
+    if (res->count == res->size) {
+        res->size *= 2;
+        res->msgs = XRENEW(res->msgs, LDAPMessage_t *, res->size);
+    }
+    return res->msgs[res->count++] = XNEW0(LDAPMessage_t, 1);
+}
+
+LDAPMessage_t *ldap_response_get(ldap_response *res)
+{
+    assert(res);
+
+    if (res->next < res->count)
+        return res->msgs[res->next];
+    return NULL;
+}
+
+void ldap_response_inc(ldap_response *res)
+{
+    assert(res);
+
+    res->next++;
+}
+
+void ldap_response_search(ldap_response *res, const char *basedn, const int msgid, const SearchRequest_t *req)
+{
+    assert(req);
+    assert(basedn);
+    assert(res);
+    const int bad_dn = strcmp((const char *)req->baseObject.buf, basedn)
+        && strcmp((const char *)req->baseObject.buf, "");
+    const int bad_filter = !Filter_ok(&req->filter);
+    int limit = req->sizeLimit;
+
+    /* Adjust limit to RESPONSE_MAX if it is zero or too large. */
+    limit = (limit && (limit < RESPONSE_MAX)) ? limit : RESPONSE_MAX;
+    LDAPMessage_t *msg = ldap_response_add(res);
+    /* Add all the matching entries. */
+    if (!bad_dn && !bad_filter) {
+        passwd_t *pw;
+        while ((pw = getpwent()) && (res->count <= limit)) {
+            msg->messageID = msgid;
+            msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
+            SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
+            passwd2ldap(entry, basedn, pw);
+            if (Filter_matches(&req->filter, entry)) {
+                /* The entry matches, keep it and add another. */
+                msg = ldap_response_add(res);
+            } else {
+                /* Empty and wipe the entry message for the next one. */
+                ldapmessage_empty(msg);
+                memset(msg, 0, sizeof(*msg));
+            }
+        }
+        setpwent();
+    }
+    /* Otherwise construct a SearchResultDone. */
+    msg->messageID = msgid;
+    msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResDone;
+    SearchResultDone_t *done = &msg->protocolOp.choice.searchResDone;
+    if (bad_dn) {
+        done->resultCode = LDAPResult__resultCode_other;
+        LDAPString_set(&done->diagnosticMessage, "baseobject is invalid");
+    } else if (bad_filter) {
+        done->resultCode = LDAPResult__resultCode_other;
+        LDAPString_set(&done->diagnosticMessage, "filter not supported");
+    } else {
+        done->resultCode = LDAPResult__resultCode_success;
+        LDAPString_set(&done->matchedDN, basedn);
+    }
+}
+
 /* Allocate a PartialAttribute and set it's type. */
 static PartialAttribute_t *PartialAttribute_new(const char *type)
 {
@@ -62,7 +158,7 @@ static const PartialAttribute_t *SearchResultEntry_get(const SearchResultEntry_t
 
     for (int i = 0; i < res->attributes.list.count; i++) {
         const PartialAttribute_t *attr = res->attributes.list.array[i];
-        if (strcmp((const char *)attr->type.buf, type))
+        if (!strcmp((const char *)attr->type.buf, type))
             return attr;
     }
     return NULL;
@@ -191,7 +287,7 @@ bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal, const
 
     if (attr)
         for (int i = 0; i < attr->vals.list.count; i++)
-            if (strcmp((const char *)attr->vals.list.array[i]->buf, value))
+            if (!strcmp((const char *)attr->vals.list.array[i]->buf, value))
                 return true;
     return false;
 }
@@ -200,6 +296,7 @@ bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *res)
 {
     assert(filter);
     assert(res);
+    assert(Filter_ok(filter));
 
     switch (filter->present) {
     case Filter_PR_and:

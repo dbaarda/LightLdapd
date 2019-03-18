@@ -50,7 +50,7 @@ typedef struct {
     ev_timer delay_watcher;
     LDAPMessage_t *request;
     ldap_status_t request_status;
-    LDAPMessage_t *response;
+    ldap_response response;
     ldap_status_t response_status;
     int response_stage;
     buffer_t recv_buf;
@@ -320,7 +320,7 @@ void ldap_request_init(ldap_connection *connection)
 {
     connection->request = NULL;
     connection->request_status = RC_WMORE;
-    connection->response = NULL;
+    ldap_response_init(&connection->response, 1);
     connection->response_status = RC_WMORE;
     connection->response_stage = 0;
 }
@@ -328,7 +328,7 @@ void ldap_request_init(ldap_connection *connection)
 void ldap_request_done(ldap_connection *connection)
 {
     ldapmessage_free(connection->request);
-    ldapmessage_free(connection->response);
+    ldap_response_done(&connection->response);
 }
 
 ldap_status_t ldap_request_reply(ldap_connection *connection, LDAPMessage_t *req)
@@ -349,100 +349,62 @@ ldap_status_t ldap_request_reply(ldap_connection *connection, LDAPMessage_t *req
 ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequest_t *req)
 {
     ldap_server *server = connection->server;
-    LDAPMessage_t *res = connection->response;
+    ldap_response *response = &connection->response;
+    LDAPMessage_t *msg = ldap_response_get(response);
     ev_tstamp delay = 0.0;
 
     /* If the delay is active, do nothing and return RC_WMORE to try again. */
     if (ev_is_active(&connection->delay_watcher))
         return RC_WMORE;
-    /* If we have already built the response, just try to send it. */
-    if (res)
-        return ldap_connection_send(connection, res);
-    /* Otherwise construct the response first. */
-    res = connection->response = XNEW0(LDAPMessage_t, 1);
-    res->messageID = msgid;
-    res->protocolOp.present = LDAPMessage__protocolOp_PR_bindResponse;
-    BindResponse_t *bindResponse = &res->protocolOp.choice.bindResponse;
-    LDAPString_set(&bindResponse->matchedDN, (const char *)req->name.buf);
-    if (server->anonymous && req->name.size == 0) {
-        /* allow anonymous */
-        bindResponse->resultCode = BindResponse__resultCode_success;
-    } else if (req->authentication.present == AuthenticationChoice_PR_simple) {
-        /* simple auth */
-        char user[PWNAME_MAX];
-        char *pw = (char *)req->authentication.choice.simple.buf;
-        char status[PAMMSG_LEN] = "";
-        if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
-            bindResponse->resultCode = BindResponse__resultCode_invalidDNSyntax;
-        } else if (PAM_SUCCESS != auth_pam(user, pw, status, &delay)) {
-            bindResponse->resultCode = BindResponse__resultCode_invalidCredentials;
-            LDAPString_set(&bindResponse->diagnosticMessage, status);
-        } else {                /* Success! */
+    /* If we have not built the response, build it first. */
+    if (!msg) {
+        msg = ldap_response_add(response);
+        msg->messageID = msgid;
+        msg->protocolOp.present = LDAPMessage__protocolOp_PR_bindResponse;
+        BindResponse_t *bindResponse = &msg->protocolOp.choice.bindResponse;
+        LDAPString_set(&bindResponse->matchedDN, (const char *)req->name.buf);
+        if (server->anonymous && req->name.size == 0) {
+            /* allow anonymous */
             bindResponse->resultCode = BindResponse__resultCode_success;
+        } else if (req->authentication.present == AuthenticationChoice_PR_simple) {
+            /* simple auth */
+            char user[PWNAME_MAX];
+            char *pw = (char *)req->authentication.choice.simple.buf;
+            char status[PAMMSG_LEN] = "";
+            if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
+                bindResponse->resultCode = BindResponse__resultCode_invalidDNSyntax;
+            } else if (PAM_SUCCESS != auth_pam(user, pw, status, &delay)) {
+                bindResponse->resultCode = BindResponse__resultCode_invalidCredentials;
+                LDAPString_set(&bindResponse->diagnosticMessage, status);
+            } else {            /* Success! */
+                bindResponse->resultCode = BindResponse__resultCode_success;
+            }
+        } else {
+            /* sasl or anonymous auth */
+            bindResponse->resultCode = BindResponse__resultCode_authMethodNotSupported;
         }
-    } else {
-        /* sasl or anonymous auth */
-        bindResponse->resultCode = BindResponse__resultCode_authMethodNotSupported;
+        /* If delay was set, pause response by starting delay watcher. */
+        if (delay > 0.0) {
+            ev_timer_set(&connection->delay_watcher, delay, 0.0);
+            ev_timer_start(server->loop, &connection->delay_watcher);
+            return RC_WMORE;
+        }
     }
-    /* If delay was set, pause response by starting delay watcher. */
-    if (delay > 0.0) {
-        ev_timer_set(&connection->delay_watcher, delay, 0.0);
-        ev_timer_start(server->loop, &connection->delay_watcher);
-        return RC_WMORE;
-    }
-    return ldap_connection_send(connection, res);
+    return ldap_connection_send(connection, msg);
 }
 
 ldap_status_t ldap_request_search(ldap_connection *connection, int msgid, SearchRequest_t *req)
 {
     ldap_server *server = connection->server;
-    LDAPMessage_t *res = connection->response;
+    ldap_response *response = &connection->response;
     ldap_status_t status = RC_WMORE;
-    /* Check that it's a valid search request. */
-    AttributeValueAssertion_t *attr = &req->filter.choice.equalityMatch;
-    const int bad_dn = strcmp((const char *)req->baseObject.buf, server->basedn)
-        && strcmp((const char *)req->baseObject.buf, "");
-    const int bad_filter = req->filter.present != Filter_PR_equalityMatch
-        || strcmp((const char *)attr->attributeDesc.buf, "uid");
-    const char *user = (char *)attr->assertionValue.buf;
+    LDAPMessage_t *msg;
 
-    if (connection->response_stage == 0) {
-        /* Allocate the response. */
-        res = connection->response = XNEW0(LDAPMessage_t, 1);
-        status = RC_OK;
-    }
-    do {
-        /* If we need to, create a new response. */
-        if (status == RC_OK) {
-            /* Empty and wipe the response message. */
-            ldapmessage_empty(res);
-            memset(res, 0, sizeof(*res));
-            res->messageID = msgid;
-            res->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
-            SearchResultEntry_t *searchResEntry = &res->protocolOp.choice.searchResEntry;
-            if (connection->response_stage == 0 && !bad_dn && !bad_filter
-                && getpwnam2ldap(searchResEntry, server->basedn, user) != -1) {
-                /* If the request is good and we found an entry, send it. */
-                connection->response_stage = 1;
-            } else {
-                /* Otherwise construct a SearchResultDone. */
-                res->protocolOp.present = LDAPMessage__protocolOp_PR_searchResDone;
-                SearchResultDone_t *searchResDone = &res->protocolOp.choice.searchResDone;
-                if (bad_dn) {
-                    searchResDone->resultCode = LDAPResult__resultCode_other;
-                    LDAPString_set(&searchResDone->diagnosticMessage, "baseobject is invalid");
-                } else if (bad_filter) {
-                    searchResDone->resultCode = LDAPResult__resultCode_other;
-                    LDAPString_set(&searchResDone->diagnosticMessage, "filter not supported");
-                } else {
-                    searchResDone->resultCode = LDAPResult__resultCode_success;
-                    LDAPString_set(&searchResDone->matchedDN, server->basedn);
-                }
-                connection->response_stage = 2;
-            }
-        }
-        status = ldap_connection_send(connection, res);
-    } while (status == RC_OK && connection->response_stage < 2);
+    /* If we have not built the response, build it first. */
+    if (!response->count)
+        ldap_response_search(response, server->basedn, msgid, req);
+    while ((msg = ldap_response_get(response)) && (status = ldap_connection_send(connection, msg)) == RC_OK)
+        ldap_response_inc(response);
     return status;
 }
 

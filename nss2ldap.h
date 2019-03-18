@@ -12,6 +12,7 @@
 
 #define PWNAME_MAX 32           /**< The max length of a username string. */
 #define STRING_MAX 256          /**< The max length of an LDAPString. */
+#define RESPONSE_MAX 100000     /**< The max results in any response. */
 
 /** Destroy and free an LDAPMessage instance. */
 #define ldapmessage_free(msg) ASN_STRUCT_FREE(asn_DEF_LDAPMessage, msg)
@@ -33,6 +34,57 @@
 
 /** The type for passwd entries. */
 typedef struct passwd passwd_t;
+
+/** A collection of LDAPMessages that make up an ldap response. */
+typedef struct {
+    int count;                  /**< The number of LDAPMessages in the
+                                 * response. */
+    int next;                   /**< The index of the next message to send. */
+    int size;                   /**< The allocated size of **replies. */
+    LDAPMessage_t **msgs;       /**< Array of LDAPMessages in the reply. */
+} ldap_response;
+
+/** Initialize an ldap_reponse.
+ *
+ * \param *res - the ldap_response to initialize.
+ *
+ * \param size - the initial size to allocate. */
+void ldap_response_init(ldap_response *res, int size);
+
+/** Destroy an ldap_response.
+ *
+ * \param *res - the ldap_response to destroy. */
+void ldap_response_done(ldap_response *res);
+
+/** Add an LDAPMessage_t to an ldap_response.
+ *
+ * \param *res - the ldap_response to add to.
+ *
+ * \return the LDAPMessage_t added. */
+LDAPMessage_t *ldap_response_add(ldap_response *res);
+
+/** Get the next LDAPMessage_t to send.
+ *
+ * \param *res - the ldap_response to get it from.
+ *
+ * \return the next LDAPMessage_t to send, or NULL if finished. */
+LDAPMessage_t *ldap_response_get(ldap_response *res);
+
+/** Increment the next LDAPMessage_t to send.
+ *
+ * \param *res - the ldap_response to increment. */
+void ldap_response_inc(ldap_response *res);
+
+/** Get the ldap_response for a SearchRequest message.
+ *
+ * \param res - the ldap_response to add the replies to.
+ *
+ * \param basedn - The basedn to use.
+ *
+ * \param msgid - the messageID of the request.
+ *
+ * \param req - The SearchRequest to respond to. */
+void ldap_response_search(ldap_response *res, const char *basedn, const int msgid, const SearchRequest_t *req);
 
 /** Return a full "uid=<name>,<basedn>" ldap dn from a name and basedn.
  *
@@ -88,7 +140,7 @@ bool Filter_ok(const Filter_t *filter);
 
 /** Check if a Filter matches a SearchResultEntry.
  *
- * \param filter - The the Filter to use.
+ * \param filter - The Filter to use.
  *
  * \param res - the SearchResultEntry to test.
  *
