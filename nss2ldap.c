@@ -5,7 +5,17 @@
  */
 
 #include "nss2ldap.h"
+#include <sys/types.h>
+#include <grp.h>
+#include <pwd.h>
+#include <shadow.h>
+#include <stdbool.h>
 #include "utils.h"
+
+/** The type for passwd, group, and spwd entries. */
+typedef struct passwd passwd_t;
+typedef struct group group_t;
+typedef struct spwd spwd_t;
 
 /* PartialAttribute methods. */
 static PartialAttribute_t *PartialAttribute_new(const char *type);
@@ -263,18 +273,24 @@ static void SearchResultEntry_passwd(SearchResultEntry_t *res, const char *based
     assert(pw);
     PartialAttribute_t *attribute;
     char buf[STRING_MAX];
+    spwd_t *sp = getspnam(pw->pw_name);
 
     LDAPString_set(&res->objectName, name2dn(basedn, pw->pw_name, buf));
     attribute = SearchResultEntry_add(res, "objectClass");
     PartialAttribute_add(attribute, "top");
     PartialAttribute_add(attribute, "account");
     PartialAttribute_add(attribute, "posixAccount");
+    if (sp)
+        PartialAttribute_add(attribute, "shadowAccount");
     attribute = SearchResultEntry_add(res, "uid");
     PartialAttribute_add(attribute, pw->pw_name);
     attribute = SearchResultEntry_add(res, "cn");
     PartialAttribute_add(attribute, gecos2cn(pw->pw_gecos, buf));
     attribute = SearchResultEntry_add(res, "userPassword");
-    PartialAttribute_addf(attribute, "{crypt}%s", pw->pw_passwd);
+    if (sp)
+        PartialAttribute_addf(attribute, "{crypt}%s", sp->sp_pwdp);
+    else
+        PartialAttribute_addf(attribute, "{crypt}%s", pw->pw_passwd);
     attribute = SearchResultEntry_add(res, "uidNumber");
     PartialAttribute_addf(attribute, "%i", pw->pw_uid);
     attribute = SearchResultEntry_add(res, "gidNumber");
@@ -285,6 +301,22 @@ static void SearchResultEntry_passwd(SearchResultEntry_t *res, const char *based
     PartialAttribute_add(attribute, pw->pw_dir);
     attribute = SearchResultEntry_add(res, "loginShell");
     PartialAttribute_add(attribute, pw->pw_shell);
+    if (sp) {
+        attribute = SearchResultEntry_add(res, "shadowLastChange");
+        PartialAttribute_addf(attribute, "%i", sp->sp_lstchg);
+        attribute = SearchResultEntry_add(res, "shadowMin");
+        PartialAttribute_addf(attribute, "%i", sp->sp_min);
+        attribute = SearchResultEntry_add(res, "shadowMax");
+        PartialAttribute_addf(attribute, "%i", sp->sp_max);
+        attribute = SearchResultEntry_add(res, "shadowWarning");
+        PartialAttribute_addf(attribute, "%i", sp->sp_warn);
+        attribute = SearchResultEntry_add(res, "shadowInactive");
+        PartialAttribute_addf(attribute, "%i", sp->sp_inact);
+        attribute = SearchResultEntry_add(res, "shadowExpire");
+        PartialAttribute_addf(attribute, "%i", sp->sp_expire);
+        attribute = SearchResultEntry_add(res, "shadowFlag");
+        PartialAttribute_addf(attribute, "%i", sp->sp_flag);
+    }
 }
 
 /* Set a SearchResultEntry from an nss group entry. */

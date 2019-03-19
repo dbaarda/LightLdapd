@@ -5,10 +5,6 @@
  */
 #ifndef LIGHTLDAPD_NSS2LDAP_H
 #define LIGHTLDAPD_NSS2LDAP_H
-#include <sys/types.h>
-#include <grp.h>
-#include <pwd.h>
-#include <stdbool.h>
 #include "asn1/LDAPMessage.h"
 
 #define PWNAME_MAX 32           /**< The max length of a username string. */
@@ -32,11 +28,6 @@
 
 /** Set an LDAPString instance from a string. */
 #define LDAPString_set(str, s) OCTET_STRING_fromString((str), (s));
-
-/** The type for passwd, spwd, and group entries. */
-typedef struct passwd passwd_t;
-typedef struct spwd spwd_t;
-typedef struct group group_t;
 
 /** A collection of LDAPMessages that make up an ldap response. */
 typedef struct {
