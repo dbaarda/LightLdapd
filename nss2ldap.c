@@ -85,7 +85,23 @@ void ldap_response_search(ldap_response *res, const char *basedn, const int msgi
                 memset(msg, 0, sizeof(*msg));
             }
         }
-        setpwent();
+        endpwent();
+        group_t *gr;
+        while ((gr = getgrent()) && (res->count <= limit)) {
+            msg->messageID = msgid;
+            msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
+            SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
+            group2ldap(entry, basedn, gr);
+            if (Filter_matches(&req->filter, entry)) {
+                /* The entry matches, keep it and add another. */
+                msg = ldap_response_add(res);
+            } else {
+                /* Empty and wipe the entry message for the next one. */
+                ldapmessage_empty(msg);
+                memset(msg, 0, sizeof(*msg));
+            }
+        }
+        endgrent();
     }
     /* Otherwise construct a SearchResultDone. */
     msg->messageID = msgid;
@@ -181,7 +197,16 @@ char *name2dn(const char *basedn, const char *name, char *dn)
     assert(basedn);
     assert(name);
     assert(dn);
-    snprintf(dn, STRING_MAX, "uid=%s,%s", name, basedn);
+    snprintf(dn, STRING_MAX, "uid=%s,ou=people,%s", name, basedn);
+    return dn;
+}
+
+char *group2dn(const char *basedn, const char *group, char *dn)
+{
+    assert(basedn);
+    assert(group);
+    assert(dn);
+    snprintf(dn, STRING_MAX, "cn=%s,ou=groups,%s", group, basedn);
     return dn;
 }
 
@@ -190,12 +215,12 @@ char *dn2name(const char *basedn, const char *dn, char *name)
     assert(basedn);
     assert(dn);
     assert(name);
-    /* uid=$name$,$basedn$ */
+    /* uid=$name$,ou=people,$basedn$ */
     const char *pos = dn + 4;
     const char *end = strchr(dn, ',');
     size_t len = end - pos;
 
-    if (!end || strncmp(dn, "uid=", 4) || strcmp(end + 1, basedn))
+    if (!end || strncmp(dn, "uid=", 4) || strncmp(end, ",ou=people,", 11) || strcmp(end + 11, basedn))
         return NULL;
     memcpy(name, pos, len);
     name[len] = '\0';
@@ -231,6 +256,29 @@ void passwd2ldap(SearchResultEntry_t *res, const char *basedn, passwd_t *pw)
     PartialAttribute_add(attribute, pw->pw_dir);
     attribute = SearchResultEntry_add(res, "loginShell");
     PartialAttribute_add(attribute, pw->pw_shell);
+}
+
+void group2ldap(SearchResultEntry_t *res, const char *basedn, group_t *gr)
+{
+    assert(res);
+    assert(basedn);
+    assert(gr);
+    PartialAttribute_t *attribute;
+    char buf[STRING_MAX];
+
+    LDAPString_set(&res->objectName, group2dn(basedn, gr->gr_name, buf));
+    attribute = SearchResultEntry_add(res, "objectClass");
+    PartialAttribute_add(attribute, "top");
+    PartialAttribute_add(attribute, "posixGroup");
+    attribute = SearchResultEntry_add(res, "cn");
+    PartialAttribute_add(attribute, gr->gr_name);
+    attribute = SearchResultEntry_add(res, "userPassword");
+    PartialAttribute_addf(attribute, "{crypt}%s", gr->gr_passwd);
+    attribute = SearchResultEntry_add(res, "gidNumber");
+    PartialAttribute_addf(attribute, "%i", gr->gr_gid);
+    attribute = SearchResultEntry_add(res, "memberUid");
+    for (char **m = gr->gr_mem; *m; m++)
+        PartialAttribute_add(attribute, *m);
 }
 
 int getpwnam2ldap(SearchResultEntry_t *res, const char *basedn, const char *name)
