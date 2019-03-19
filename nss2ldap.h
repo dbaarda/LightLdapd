@@ -89,7 +89,7 @@ void ldap_response_inc(ldap_response *res);
  * \param req - The SearchRequest to respond to. */
 void ldap_response_search(ldap_response *res, const char *basedn, const int msgid, const SearchRequest_t *req);
 
-/** Return a full "uid=<name>,<basedn>" ldap dn from a name and basedn.
+/** Return a full "uid=<name>,ou=people,..." ldap dn from a name and basedn.
  *
  * \param basedn - the ldap base dn string.
  *
@@ -100,7 +100,7 @@ void ldap_response_search(ldap_response *res, const char *basedn, const int msgi
  * \return a pointer to the ldap dn string result. */
 char *name2dn(const char *basedn, const char *name, char *dn);
 
-/** Return the name from a full "uid=<name>,<basedn>" ldap dn.
+/** Return the name from a full "uid=<name>,ou=people,..." ldap dn.
  *
  * This checks that the dn provided is in the valid form with the right basedn
  * and returns NULL if it is invalid.
@@ -113,41 +113,5 @@ char *name2dn(const char *basedn, const char *name, char *dn);
  *
  * \return a pointer to the name result or NULL if dn was invalid. */
 char *dn2name(const char *basedn, const char *dn, char *name);
-
-/** Set a SearchResultEntry from an nss passwd entry.
- *
- * \param res - the SearchResultEntry to set.
- *
- * \pram basedn - the basedn to use.
- *
- * \param pw - the nss passwd entry. */
-void passwd2ldap(SearchResultEntry_t *res, const char *basedn, passwd_t *pw);
-
-/** Set a SearchResultEntry from an nss user's name.
- *
- * \param res - the SearchResultEntry to set.
- *
- * \param basedn - the ldap basedn to use.
- *
- * \param name - the nss user name to use.
- *
- * \return 0 if successful, -1 if there was no such user. */
-int getpwnam2ldap(SearchResultEntry_t *res, const char *basedn, const char *name);
-
-/** Check if a Filter is fully supported.
- *
- * \param filter - The the Filter to check.
- *
- * \return true if the filter is supported, otherwise false. */
-bool Filter_ok(const Filter_t *filter);
-
-/** Check if a Filter matches a SearchResultEntry.
- *
- * \param filter - The Filter to use.
- *
- * \param res - the SearchResultEntry to test.
- *
- * \return true if res matches filter, otherwise false. */
-bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *res);
 
 #endif                          /* LIGHTLDAPD_NSS2LDAP_H */

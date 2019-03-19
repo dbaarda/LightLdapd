@@ -7,6 +7,26 @@
 #include "nss2ldap.h"
 #include "utils.h"
 
+/* PartialAttribute methods. */
+static PartialAttribute_t *PartialAttribute_new(const char *type);
+static LDAPString_t *PartialAttribute_add(PartialAttribute_t *attr, const char *value);
+static LDAPString_t *PartialAttribute_addf(PartialAttribute_t *attr, char *format, ...);
+
+/* SearchResultEntry methods. */
+static PartialAttribute_t *SearchResultEntry_add(SearchResultEntry_t *res, const char *type);
+static const PartialAttribute_t *SearchResultEntry_get(const SearchResultEntry_t *res, const char *type);
+static void SearchResultEntry_passwd(SearchResultEntry_t *res, const char *basedn, passwd_t *pw);
+static void SearchResultEntry_group(SearchResultEntry_t *res, const char *basedn, group_t *gr);
+static int SearchResultEntry_getpwnam(SearchResultEntry_t *res, const char *basedn, const char *name);
+
+/* AttributeValueAssertion methods */
+static bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal, const SearchResultEntry_t *res);
+
+/* Filter methods. */
+static bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *res);
+static bool Filter_ok(const Filter_t *filter);
+
+/* Initialize an ldap_reponse. */
 void ldap_response_init(ldap_response *res, int size)
 {
     assert(res);
@@ -18,6 +38,7 @@ void ldap_response_init(ldap_response *res, int size)
     res->msgs = XNEW0(LDAPMessage_t *, size);
 }
 
+/* Destroy an ldap_response. */
 void ldap_response_done(ldap_response *res)
 {
     assert(res);
@@ -27,6 +48,7 @@ void ldap_response_done(ldap_response *res)
     free(res->msgs);
 }
 
+/* Add an LDAPMessage to an ldap_response. */
 LDAPMessage_t *ldap_response_add(ldap_response *res)
 {
     assert(res);
@@ -39,6 +61,7 @@ LDAPMessage_t *ldap_response_add(ldap_response *res)
     return res->msgs[res->count++] = XNEW0(LDAPMessage_t, 1);
 }
 
+/* Get the next LDAPMessage_t to send. */
 LDAPMessage_t *ldap_response_get(ldap_response *res)
 {
     assert(res);
@@ -48,6 +71,7 @@ LDAPMessage_t *ldap_response_get(ldap_response *res)
     return NULL;
 }
 
+/* Increment the next LDAPMessage_t to send. */
 void ldap_response_inc(ldap_response *res)
 {
     assert(res);
@@ -55,6 +79,7 @@ void ldap_response_inc(ldap_response *res)
     res->next++;
 }
 
+/* Get the ldap_response for a SearchRequest message. */
 void ldap_response_search(ldap_response *res, const char *basedn, const int msgid, const SearchRequest_t *req)
 {
     assert(req);
@@ -75,7 +100,7 @@ void ldap_response_search(ldap_response *res, const char *basedn, const int msgi
             msg->messageID = msgid;
             msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
             SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
-            passwd2ldap(entry, basedn, pw);
+            SearchResultEntry_passwd(entry, basedn, pw);
             if (Filter_matches(&req->filter, entry)) {
                 /* The entry matches, keep it and add another. */
                 msg = ldap_response_add(res);
@@ -91,7 +116,7 @@ void ldap_response_search(ldap_response *res, const char *basedn, const int msgi
             msg->messageID = msgid;
             msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
             SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
-            group2ldap(entry, basedn, gr);
+            SearchResultEntry_group(entry, basedn, gr);
             if (Filter_matches(&req->filter, entry)) {
                 /* The entry matches, keep it and add another. */
                 msg = ldap_response_add(res);
@@ -117,6 +142,56 @@ void ldap_response_search(ldap_response *res, const char *basedn, const int msgi
         done->resultCode = LDAPResult__resultCode_success;
         LDAPString_set(&done->matchedDN, basedn);
     }
+}
+
+/* Get the cn from the first field of a gecos entry. */
+char *gecos2cn(const char *gecos, char *cn)
+{
+    assert(gecos);
+    assert(cn);
+    size_t len = strcspn(gecos, ",");
+
+    memcpy(cn, gecos, len);
+    cn[len] = '\0';
+    return cn;
+}
+
+/* Return a full "uid=<name>,ou=people,..." ldap dn from a name and basedn. */
+char *name2dn(const char *basedn, const char *name, char *dn)
+{
+    assert(basedn);
+    assert(name);
+    assert(dn);
+    snprintf(dn, STRING_MAX, "uid=%s,ou=people,%s", name, basedn);
+    return dn;
+}
+
+/* Return a full "uid=<name>,ou=groups,..." ldap dn from a name and basedn. */
+char *group2dn(const char *basedn, const char *group, char *dn)
+{
+    assert(basedn);
+    assert(group);
+    assert(dn);
+    snprintf(dn, STRING_MAX, "cn=%s,ou=groups,%s", group, basedn);
+    return dn;
+}
+
+/* Return the name from a full "uid=<name>,ou=people,..." ldap dn. */
+char *dn2name(const char *basedn, const char *dn, char *name)
+{
+    assert(basedn);
+    assert(dn);
+    assert(name);
+    /* uid=$name$,ou=people,$basedn$ */
+    const char *pos = dn + 4;
+    const char *end = strchr(dn, ',');
+    size_t len = end - pos;
+
+    if (!end || strncmp(dn, "uid=", 4) || strncmp(end, ",ou=people,", 11) || strcmp(end + 11, basedn))
+        return NULL;
+    memcpy(name, pos, len);
+    name[len] = '\0';
+    return name;
 }
 
 /* Allocate a PartialAttribute and set it's type. */
@@ -180,54 +255,8 @@ static const PartialAttribute_t *SearchResultEntry_get(const SearchResultEntry_t
     return NULL;
 }
 
-/* Get the cn from the first field of a gecos entry. */
-char *gecos2cn(const char *gecos, char *cn)
-{
-    assert(gecos);
-    assert(cn);
-    size_t len = strcspn(gecos, ",");
-
-    memcpy(cn, gecos, len);
-    cn[len] = '\0';
-    return cn;
-}
-
-char *name2dn(const char *basedn, const char *name, char *dn)
-{
-    assert(basedn);
-    assert(name);
-    assert(dn);
-    snprintf(dn, STRING_MAX, "uid=%s,ou=people,%s", name, basedn);
-    return dn;
-}
-
-char *group2dn(const char *basedn, const char *group, char *dn)
-{
-    assert(basedn);
-    assert(group);
-    assert(dn);
-    snprintf(dn, STRING_MAX, "cn=%s,ou=groups,%s", group, basedn);
-    return dn;
-}
-
-char *dn2name(const char *basedn, const char *dn, char *name)
-{
-    assert(basedn);
-    assert(dn);
-    assert(name);
-    /* uid=$name$,ou=people,$basedn$ */
-    const char *pos = dn + 4;
-    const char *end = strchr(dn, ',');
-    size_t len = end - pos;
-
-    if (!end || strncmp(dn, "uid=", 4) || strncmp(end, ",ou=people,", 11) || strcmp(end + 11, basedn))
-        return NULL;
-    memcpy(name, pos, len);
-    name[len] = '\0';
-    return name;
-}
-
-void passwd2ldap(SearchResultEntry_t *res, const char *basedn, passwd_t *pw)
+/* Set a SearchResultEntry from an nss passwd entry. */
+static void SearchResultEntry_passwd(SearchResultEntry_t *res, const char *basedn, passwd_t *pw)
 {
     assert(res);
     assert(basedn);
@@ -258,7 +287,8 @@ void passwd2ldap(SearchResultEntry_t *res, const char *basedn, passwd_t *pw)
     PartialAttribute_add(attribute, pw->pw_shell);
 }
 
-void group2ldap(SearchResultEntry_t *res, const char *basedn, group_t *gr)
+/* Set a SearchResultEntry from an nss group entry. */
+static void SearchResultEntry_group(SearchResultEntry_t *res, const char *basedn, group_t *gr)
 {
     assert(res);
     assert(basedn);
@@ -281,7 +311,8 @@ void group2ldap(SearchResultEntry_t *res, const char *basedn, group_t *gr)
         PartialAttribute_add(attribute, *m);
 }
 
-int getpwnam2ldap(SearchResultEntry_t *res, const char *basedn, const char *name)
+/* Set a SearchResultEntry from an nss user's name. */
+static int SearchResultEntry_getpwnam(SearchResultEntry_t *res, const char *basedn, const char *name)
 {
     assert(res);
     assert(basedn);
@@ -290,11 +321,28 @@ int getpwnam2ldap(SearchResultEntry_t *res, const char *basedn, const char *name
 
     if (!pw)
         return -1;
-    passwd2ldap(res, basedn, pw);
+    SearchResultEntry_passwd(res, basedn, pw);
     return 0;
 }
 
-bool Filter_ok(const Filter_t *filter)
+/* Check if an AttributeValueAssertion is equal to a SearchResultEntry */
+static bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal, const SearchResultEntry_t *res)
+{
+    assert(equal);
+    assert(res);
+    const char *name = (const char *)equal->attributeDesc.buf;
+    const char *value = (const char *)equal->assertionValue.buf;
+    const PartialAttribute_t *attr = SearchResultEntry_get(res, name);
+
+    if (attr)
+        for (int i = 0; i < attr->vals.list.count; i++)
+            if (!strcmp((const char *)attr->vals.list.array[i]->buf, value))
+                return true;
+    return false;
+}
+
+/* Check if a Filter is fully supported. */
+static bool Filter_ok(const Filter_t *filter)
 {
     assert(filter);
 
@@ -324,23 +372,8 @@ bool Filter_ok(const Filter_t *filter)
     }
 }
 
-/* Check if an AttributeValueAssertion is equal to a SearchResultEntry */
-bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal, const SearchResultEntry_t *res)
-{
-    assert(equal);
-    assert(res);
-    const char *name = (const char *)equal->attributeDesc.buf;
-    const char *value = (const char *)equal->assertionValue.buf;
-    const PartialAttribute_t *attr = SearchResultEntry_get(res, name);
-
-    if (attr)
-        for (int i = 0; i < attr->vals.list.count; i++)
-            if (!strcmp((const char *)attr->vals.list.array[i]->buf, value))
-                return true;
-    return false;
-}
-
-bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *res)
+/* Check if a Filter matches a SearchResultEntry. */
+static bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *res)
 {
     assert(filter);
     assert(res);
