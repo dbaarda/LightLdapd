@@ -7,11 +7,14 @@
 #define LIGHTLDAPD_UTILS_H
 
 #include <assert.h>
+#include <err.h>
+#include <pwd.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <err.h>
 #include <sysexits.h>
+#include <sys/types.h>
 
 #define fail(msg) do { perror(msg); return; } while (0);
 #define fail1(msg, ret) do { perror(msg); return ret; } while (0);
@@ -20,5 +23,8 @@
 #define XRENEW(ptr, type, n) ({void *_p=realloc(ptr, n*sizeof(type)); if (!_p) err(EX_OSERR, "realloc"); _p;})
 #define XSTRDUP(s) ({char *_s=strdup(s); if (!_s) err(EX_OSERR, "strdup"); _s;})
 #define XSTRNDUP(s, n) ({char *_s=strndup(s,n); if (!_s) err(EX_OSERR, "strndup"); _s;})
+
+/** Get a uid from a user name. */
+#define name2uid(n) ({struct passwd *_p=getpwnam(n); if (!_p) errx(EX_OSERR, "User not found: %s", n); _p->pw_uid;})
 
 #endif                          /* LIGHTLDAPD_UTILS_H */

@@ -5,12 +5,10 @@
  */
 
 #include "nss2ldap.h"
-#include <sys/types.h>
+#include "utils.h"
 #include <grp.h>
 #include <pwd.h>
 #include <shadow.h>
-#include <stdbool.h>
-#include "utils.h"
 
 /** The type for passwd, group, and spwd entries. */
 typedef struct passwd passwd_t;
