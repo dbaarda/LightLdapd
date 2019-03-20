@@ -30,7 +30,18 @@ entente as simple as possible and avoid adding features needed for
 LightLdapd. Improvements have and will be fed back into entente when
 they don't increase its size.
 
-The rest of this readme is not finished yet.
+Status
+======
+
+LightLdapd is now functional enough to be used for clients using
+pam_ldap authentication and/or nss_ldap access to passwd, group, and
+shadow data.
+
+It does not yet support TLS encryption, so should not be used on
+untrusted networks unless put behind an ssl proxy.
+
+It has not been optimized at all, and is currently very inefficient.
+It does a full scan of all users and groups every search request.
 
 Contents
 ========
@@ -102,7 +113,24 @@ Options
 -l  Bind to the loopback interface only.
 -p port  Set local port number (default: 389).
 -d  Run as a daemon.
--r user  Set the bind user for 'root' access to shadowAccount data.
+-r rootuser  Optional bind user for 'root' access to shadowAccount data.
+-u runuser  Optional user to run as after dropping root privileges.
+
+Note lightldapd must run as root to open the default ldap serving
+port, but using ``-u runuser`` it will use setuid() to drop root
+privileges after starting. However, this also usually means it cannot
+access nss shadow data so will not serve shadowAccount data. Clients
+using pam_ldap for authentication don't need to access shadow data
+anyway, and it is more secure to not export it.
+
+However, if you want clients to use normal pam_unix authentication and
+read shadow data using nss_ldap, then the runuser needs to be
+privilged enough to read nss shadow data on the server. If the server
+is using nss_unix, this is often done by adding the runuser to a
+``shadow`` group that has read access to ``/etc/shadow``. You need to
+also configure nss_ldap on the client machines to bind as the rootuser
+with the ``rootbinddn`` setting so root (and only root)on the clients
+can read shadow data.
 
 
 Example usage with lighttpd
@@ -162,8 +190,9 @@ tracker.
 Development
 ===========
 
-See DEVELOPMENT for development instructions.
+See DEVELOPMENT.rst for development instructions.
 
+See DESIGN.rst for general design philosophy and ideas.
 
 ----
 
