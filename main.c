@@ -6,12 +6,12 @@
  */
 
 #include "utils.h"
+#include "pam.h"
+#include "nss2ldap.h"
 #include <unistd.h>
 #include <netinet/in.h>
 #define EV_COMPAT3 0            /* Use the ev 4.X API. */
 #include <ev.h>
-#include "pam.h"
-#include "nss2ldap.h"
 
 #define LISTENQ 128
 
@@ -31,12 +31,13 @@ void buffer_consumed(buffer_t *buffer, size_t len);
 #define buffer_full(buffer) ((buffer)->len == BUFFER_SIZE)
 
 typedef struct {
-    char *basedn;
-    int anonymous;
-    ev_loop *loop;
-    ev_io connection_watcher;
+    char *basedn;               /**< The ldap basedn to use. */
+    uid_t rootuid;              /**< The uid of admin "root" user. */
+    bool anonymous;             /**< If anonymous bind is allowed. */
+    ev_loop *loop;              /**< The libev loop to use. */
+    ev_io connection_watcher;   /**< The libev incoming connection watcher. */
 } ldap_server;
-void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, int anonymous);
+void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonymous);
 int ldap_server_start(ldap_server *server, uint32_t addr, int port);
 void ldap_server_stop(ldap_server *server);
 
@@ -44,17 +45,17 @@ void ldap_server_stop(ldap_server *server);
 typedef enum asn_dec_rval_code_e ldap_status_t;
 
 typedef struct {
-    ldap_server *server;
-    ev_io read_watcher;
-    ev_io write_watcher;
-    ev_timer delay_watcher;
+    ldap_server *server;        /**< The server for this connection. */
+    uid_t binduid;              /**< The uid the client binded to. */
+    ev_io read_watcher;         /**< The libev data read watcher. */
+    ev_io write_watcher;        /**< The libev data write watcher. */
+    ev_timer delay_watcher;     /**< The libev failed bind delay watcher. */
     LDAPMessage_t *request;
     ldap_status_t request_status;
     ldap_response response;
     ldap_status_t response_status;
-    int response_stage;
-    buffer_t recv_buf;
-    buffer_t send_buf;
+    buffer_t recv_buf;          /**< The buffer for incoming data. */
+    buffer_t send_buf;          /**< The buffer for outgoing data. */
 } ldap_connection;
 ldap_connection *ldap_connection_new(ldap_server *server, int fd);
 void ldap_connection_free(ldap_connection *connection);
@@ -77,7 +78,8 @@ char *setting_basedn = "dc=lightldapd";
 int setting_port = 389;
 int setting_daemon = 0;
 int setting_loopback = 0;
-int setting_anonymous = 0;
+uid_t setting_rootuid = 0;
+bool setting_anonymous = 0;
 void settings(int argc, char **argv);
 
 int main(int argc, char **argv)
@@ -90,7 +92,7 @@ int main(int argc, char **argv)
     server_addr = setting_loopback ? INADDR_LOOPBACK : INADDR_ANY;
     if (setting_daemon && daemon(0, 0))
         fail1("daemon", 1);
-    ldap_server_init(&server, loop, setting_basedn, setting_anonymous);
+    ldap_server_init(&server, loop, setting_basedn, setting_rootuid, setting_anonymous);
     if (ldap_server_start(&server, server_addr, setting_port) < 0)
         fail1("ldap_server_start", 1);
     ev_run(loop, 0);
@@ -120,9 +122,10 @@ void buffer_consumed(buffer_t *buffer, size_t len)
     }
 }
 
-void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, int anonymous)
+void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonymous)
 {
     server->basedn = basedn;
+    server->rootuid = rootuid;
     server->anonymous = anonymous;
     server->loop = loop;
     ev_init(&server->connection_watcher, accept_cb);
@@ -167,6 +170,7 @@ ldap_connection *ldap_connection_new(ldap_server *server, int fd)
     ldap_connection *connection = XNEW0(ldap_connection, 1);
 
     connection->server = server;
+    connection->binduid = -1;
     ev_io_init(&connection->read_watcher, read_cb, fd, EV_READ);
     connection->read_watcher.data = connection;
     ev_io_init(&connection->write_watcher, write_cb, fd, EV_WRITE);
@@ -322,7 +326,6 @@ void ldap_request_init(ldap_connection *connection)
     connection->request_status = RC_WMORE;
     ldap_response_init(&connection->response, 1);
     connection->response_status = RC_WMORE;
-    connection->response_stage = 0;
 }
 
 void ldap_request_done(ldap_connection *connection)
@@ -366,6 +369,7 @@ ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequ
         if (server->anonymous && req->name.size == 0) {
             /* allow anonymous */
             bindResponse->resultCode = BindResponse__resultCode_success;
+            connection->binduid = -1;
         } else if (req->authentication.present == AuthenticationChoice_PR_simple) {
             /* simple auth */
             char user[PWNAME_MAX];
@@ -378,6 +382,7 @@ ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequ
                 LDAPString_set(&bindResponse->diagnosticMessage, status);
             } else {            /* Success! */
                 bindResponse->resultCode = BindResponse__resultCode_success;
+                connection->binduid = name2uid(user);
             }
         } else {
             /* sasl or anonymous auth */
@@ -412,10 +417,10 @@ void settings(int argc, char **argv)
 {
     int c;
 
-    while ((c = getopt(argc, argv, "ab:dlp:")) != -1) {
+    while ((c = getopt(argc, argv, "ab:dlp:r:")) != -1) {
         switch (c) {
         case 'a':
-            setting_anonymous = 1;
+            setting_anonymous = true;
             break;
         case 'b':
             setting_basedn = optarg;
@@ -429,8 +434,11 @@ void settings(int argc, char **argv)
         case 'p':
             setting_port = atoi(optarg);
             break;
+        case 'r':
+            setting_rootuid = name2uid(optarg);
+            break;
         default:
-            fprintf(stderr, "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r root]\n", argv[0]);
             exit(1);
         }
     }
