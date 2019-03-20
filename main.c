@@ -79,6 +79,7 @@ int setting_port = 389;
 int setting_daemon = 0;
 int setting_loopback = 0;
 uid_t setting_rootuid = 0;
+uid_t setting_setuid = 0;
 bool setting_anonymous = 0;
 void settings(int argc, char **argv);
 
@@ -95,6 +96,8 @@ int main(int argc, char **argv)
     ldap_server_init(&server, loop, setting_basedn, setting_rootuid, setting_anonymous);
     if (ldap_server_start(&server, server_addr, setting_port) < 0)
         fail1("ldap_server_start", 1);
+    if (setting_setuid && setuid(setting_setuid))
+        fail1("setuid", 1);
     ev_run(loop, 0);
     return 0;
 }
@@ -418,7 +421,7 @@ void settings(int argc, char **argv)
 {
     int c;
 
-    while ((c = getopt(argc, argv, "ab:dlp:r:")) != -1) {
+    while ((c = getopt(argc, argv, "ab:dlp:r:u:")) != -1) {
         switch (c) {
         case 'a':
             setting_anonymous = true;
@@ -438,8 +441,11 @@ void settings(int argc, char **argv)
         case 'r':
             setting_rootuid = name2uid(optarg);
             break;
+        case 'u':
+            setting_setuid = name2uid(optarg);
+            break;
         default:
-            fprintf(stderr, "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r root]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r root] [-u user]\n", argv[0]);
             exit(1);
         }
     }
