@@ -5,7 +5,6 @@
  */
 
 #include "nss2ldap.h"
-#include "utils.h"
 #include <grp.h>
 #include <pwd.h>
 #include <shadow.h>
@@ -23,9 +22,10 @@ static LDAPString_t *PartialAttribute_addf(PartialAttribute_t *attr, char *forma
 /* SearchResultEntry methods. */
 static PartialAttribute_t *SearchResultEntry_add(SearchResultEntry_t *res, const char *type);
 static const PartialAttribute_t *SearchResultEntry_get(const SearchResultEntry_t *res, const char *type);
-static void SearchResultEntry_passwd(SearchResultEntry_t *res, const char *basedn, passwd_t *pw);
+static void SearchResultEntry_passwd(SearchResultEntry_t *res, const char *basedn, const bool isroot, passwd_t *pw);
 static void SearchResultEntry_group(SearchResultEntry_t *res, const char *basedn, group_t *gr);
-static int SearchResultEntry_getpwnam(SearchResultEntry_t *res, const char *basedn, const char *name);
+static int SearchResultEntry_getpwnam(SearchResultEntry_t *res, const char *basedn, const bool isroot,
+                                      const char *name);
 
 /* AttributeValueAssertion methods */
 static bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal, const SearchResultEntry_t *res);
@@ -88,7 +88,8 @@ void ldap_response_inc(ldap_response *res)
 }
 
 /* Get the ldap_response for a SearchRequest message. */
-void ldap_response_search(ldap_response *res, const char *basedn, const int msgid, const SearchRequest_t *req)
+void ldap_response_search(ldap_response *res, const char *basedn, const bool isroot, const int msgid,
+                          const SearchRequest_t *req)
 {
     assert(req);
     assert(basedn);
@@ -108,7 +109,7 @@ void ldap_response_search(ldap_response *res, const char *basedn, const int msgi
             msg->messageID = msgid;
             msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
             SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
-            SearchResultEntry_passwd(entry, basedn, pw);
+            SearchResultEntry_passwd(entry, basedn, isroot, pw);
             if (Filter_matches(&req->filter, entry)) {
                 /* The entry matches, keep it and add another. */
                 msg = ldap_response_add(res);
@@ -264,14 +265,14 @@ static const PartialAttribute_t *SearchResultEntry_get(const SearchResultEntry_t
 }
 
 /* Set a SearchResultEntry from an nss passwd entry. */
-static void SearchResultEntry_passwd(SearchResultEntry_t *res, const char *basedn, passwd_t *pw)
+static void SearchResultEntry_passwd(SearchResultEntry_t *res, const char *basedn, const bool isroot, passwd_t *pw)
 {
     assert(res);
     assert(basedn);
     assert(pw);
     PartialAttribute_t *attribute;
     char buf[STRING_MAX];
-    spwd_t *sp = getspnam(pw->pw_name);
+    spwd_t *sp = isroot ? getspnam(pw->pw_name) : NULL;
 
     LDAPString_set(&res->objectName, name2dn(basedn, pw->pw_name, buf));
     attribute = SearchResultEntry_add(res, "objectClass");
@@ -342,7 +343,8 @@ static void SearchResultEntry_group(SearchResultEntry_t *res, const char *basedn
 }
 
 /* Set a SearchResultEntry from an nss user's name. */
-static int SearchResultEntry_getpwnam(SearchResultEntry_t *res, const char *basedn, const char *name)
+static int SearchResultEntry_getpwnam(SearchResultEntry_t *res, const char *basedn, const bool isroot,
+                                      const char *name)
 {
     assert(res);
     assert(basedn);
@@ -351,7 +353,7 @@ static int SearchResultEntry_getpwnam(SearchResultEntry_t *res, const char *base
 
     if (!pw)
         return -1;
-    SearchResultEntry_passwd(res, basedn, pw);
+    SearchResultEntry_passwd(res, basedn, isroot, pw);
     return 0;
 }
 

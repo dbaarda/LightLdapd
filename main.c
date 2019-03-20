@@ -404,10 +404,11 @@ ldap_status_t ldap_request_search(ldap_connection *connection, int msgid, Search
     ldap_response *response = &connection->response;
     ldap_status_t status = RC_WMORE;
     LDAPMessage_t *msg;
+    bool isroot = server->rootuid == connection->binduid;
 
     /* If we have not built the response, build it first. */
     if (!response->count)
-        ldap_response_search(response, server->basedn, msgid, req);
+        ldap_response_search(response, server->basedn, isroot, msgid, req);
     while ((msg = ldap_response_get(response)) && (status = ldap_connection_send(connection, msg)) == RC_OK)
         ldap_response_inc(response);
     return status;

@@ -5,6 +5,7 @@
  */
 #ifndef LIGHTLDAPD_NSS2LDAP_H
 #define LIGHTLDAPD_NSS2LDAP_H
+#include "utils.h"
 #include "asn1/LDAPMessage.h"
 
 #define PWNAME_MAX 32           /**< The max length of a username string. */
@@ -75,10 +76,13 @@ void ldap_response_inc(ldap_response *res);
  *
  * \param basedn - The basedn to use.
  *
+ * \param isroot - If the request has 'root' access.
+ *
  * \param msgid - the messageID of the request.
  *
  * \param req - The SearchRequest to respond to. */
-void ldap_response_search(ldap_response *res, const char *basedn, const int msgid, const SearchRequest_t *req);
+void ldap_response_search(ldap_response *res, const char *basedn, const bool isroot, const int msgid,
+                          const SearchRequest_t *req);
 
 /** Return a full "uid=<name>,ou=people,..." ldap dn from a name and basedn.
  *
