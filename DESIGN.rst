@@ -10,19 +10,15 @@ Coding Style
 Consistant style is good. There are many C coding styles. We want to
 pick a popular one and stick with it. The orignal entente code was
 formated pretty closely to the linux kernel style, but with unusually
-long lines. We choose the linux style with a max line length of 120.
-The GNU indent tool can reformat code to comply with this.
+long lines. We prefer a modified linux style without tabs and a max
+code line length of 120. The tidyc indent tool that extends the GNU
+indent tool can reformat code to comply with this.
 
 Always use typedef names instead of struct names when possible to
 minimize code noise.  Both libev and asn1c have many typedef's using
 consistant naming conventions of ev_* or *_t respectively. We can use
 sed to automatically enforce this when the struct and typedef names
 are the same.
-
-Indent needs a "-T typename" for every single userdefined type,
-otherwise it inserts a space between * and the indentifier on pointer
-variable and argument definitions. We can automatically correct this
-with sed.
 
 We add a "tidy" make target to automatically reformat all the *.c
 files. See the Makefile to see what this includes. Always run "make

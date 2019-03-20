@@ -102,6 +102,7 @@ Options
 -l  Bind to the loopback interface only.
 -p port  Set local port number (default: 389).
 -d  Run as a daemon.
+-r user  Set the bind user for 'root' access to shadowAccount data.
 
 
 Example usage with lighttpd

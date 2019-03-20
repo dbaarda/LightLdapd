@@ -16,11 +16,11 @@ To build lightldapd with debug output turned on use::
 
 When running lightldapd for tesing use::
 
-  sudo ./lightldapd -l -a
+  sudo ./lightldapd -l -a -r abo
 
 When searching with ldapsearch, you should use::
 
-  ldapsearch "uid=abo" -b "dc=lightldapd" -h localhost -v -x -D "uid=abo,dc=lightldapd" -W
+  ldapsearch "uid=abo" -b "dc=lightldapd" -h localhost -v -x -D "uid=abo,ou=people,dc=lightldapd" -W
 
 Where the arguments provided are:
 
@@ -42,11 +42,19 @@ Coding Style
 
 There is a ``make tidy`` target that will reformat code to comply with
 the project's coding style. Always run ``make tidy`` to automatically
-reformat your code before committing.
+reformat your code before committing. This depends on tidyc being on
+your path. The tidyc too (an extension/wrapper of GNU indent) can be
+found here;
 
-The coding style used is the ``indent`` tool's linux style with a max
-line length of 120. Additional formatting is done with ``sed`` to remove
-struct prefixes and spurious spaces for userdefined types.
+https://github.com/dbaarda/tidyc
+
+The coding style used is ``tidyc -ppi0 -R -C -T '/ev_\w+/' -T
+'/ldap_\w+/' *.[ch]`` which is equivalent to ``indent -linux -nut -i4
+-ppi0 -l120 -lc80 -fc1 -sob -nhnl`` which is linux style with 4
+character indents instead of tabs, a max code line length of 120, and
+extra code line reformating. The tidyc tool does some additional
+formatting with ``sed`` to workaround some ``indent`` quirks and do
+additional comment formatting. 
 
 Always use typedef names instead of struct names when possible.
 
