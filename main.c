@@ -213,7 +213,7 @@ void ldap_connection_respond(ldap_connection *connection)
         if (connection->request_status == RC_OK)
             connection->response_status = ldap_request_reply(connection, *req);
     } while (connection->response_status == RC_OK);
-    if (connection->request_status == RC_FAIL) {
+    if (connection->request_status == RC_FAIL || connection->response_status == RC_FAIL) {
         ldap_connection_free(connection);
         return;
     }
