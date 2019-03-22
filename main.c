@@ -297,6 +297,7 @@ void read_cb(ev_loop *loop, ev_io *watcher, int revents)
 
 void write_cb(ev_loop *loop, ev_io *watcher, int revents)
 {
+    assert(revents == EV_WRITE);
     ldap_connection *connection = watcher->data;
     buffer_t *buf = &connection->send_buf;
     ssize_t buf_cnt;
@@ -315,6 +316,7 @@ void write_cb(ev_loop *loop, ev_io *watcher, int revents)
 
 void delay_cb(ev_loop *loop, ev_timer *watcher, int revents)
 {
+    assert(revents == EV_TIMER);
     ldap_connection *connection = watcher->data;
 
     assert(connection->server->loop == loop);
