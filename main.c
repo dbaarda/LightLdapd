@@ -344,6 +344,9 @@ ldap_status_t ldap_request_reply(ldap_connection *connection, LDAPMessage_t *req
         return ldap_request_bind(connection, req->messageID, &req->protocolOp.choice.bindRequest);
     case LDAPMessage__protocolOp_PR_searchRequest:
         return ldap_request_search(connection, req->messageID, &req->protocolOp.choice.searchRequest);
+    case LDAPMessage__protocolOp_PR_abandonRequest:
+        /* Ignore abandonRequest; the request has completed already. */
+        return RC_OK;
     case LDAPMessage__protocolOp_PR_unbindRequest:
         return RC_FAIL;
     default:
