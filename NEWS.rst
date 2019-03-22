@@ -21,6 +21,20 @@ Changes in 1.0.0 (Not released yet)
   The forked project is now named LightLdapd, and the binary and cfgs
   have been renamed to lightldapd.
 
+* Improve project documentation:
+
+  Add documentation based on templates in
+  http://minkirri.apana.org.au/~abo/projects/prjdocs/.
+
+* Tidy code.
+
+  Reformat again using a different preferred style without tabs.
+
+* Extend Search support.
+
+  Extend search support enough to support libnss-ldap clients,
+  exporting the local nsswitch view of passwd/group/etc.
+
 
 Changes in entente 1.1 (merged 2014-01-25)
 ==========================================

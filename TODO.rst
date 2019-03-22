@@ -10,37 +10,41 @@ they get done.
 Items
 =====
 
-* Improve project documentation:
-
-  Add documentation based on templates in
-  http://minkirri.apana.org.au/~abo/projects/prjdocs/.
-
 * Change license from MIT to GPL?
 
   Would prefer to require contributions to come back rather than spawn private
   forks. I have confirmed with the entente author this is OK.
-  
-* Tidy code.
 
-  Reformat again using a different common style? I'm not keen on tabs.
-
-* Improve design.
+* #9,#10 Improve design.
 
   Restructure using ldap_server, ldap_connection, ldap_request
   structs, copying the design of https://github.com/taf2/libebb.
 
-* Add logging.
+* #8 Add tests.
+
+  Currently there are no tests.
+
+* #12 Add logging.
 
   Using syslog. Or using glib's logging?
 
-* Extend Search support.
+* #4 Add StartTLS support.
 
-  Extend search support enough to support libnss-ldap clients,
-  exporting the local nsswitch view of passwd/group/etc.
+  Probably using mbedtls.
 
-* Add StartTLS support.
+* #2 Optimize Search.
 
-  Probably using gnutls.
+  Add Filter_scope() analysis to figure out what the search is
+  constrained to instead of scanning everything.
+
+  Add caching of scanned nss data.
+
+* Extend search functionality.
+
+  #1 Add support for substrings, greaterOrEqual, lessOrEqual, approxMatch
+  searches.
+
+  #3 Add support for typesOnly and attribute selection.
 
 ----
 
