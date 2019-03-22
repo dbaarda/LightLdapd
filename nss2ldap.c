@@ -94,16 +94,20 @@ void ldap_response_search(ldap_response *res, const char *basedn, const bool isr
     assert(req);
     assert(basedn);
     assert(res);
-    const int bad_dn = strcmp((const char *)req->baseObject.buf, basedn)
-        && strcmp((const char *)req->baseObject.buf, "");
-    const int bad_filter = !Filter_ok(&req->filter);
+    const bool bad_filter = !Filter_ok(&req->filter);
+    const char *reqbasedn = (const char *)req->baseObject.buf;
+    char passwdbasedn[STRING_MAX] = "ou=people,";
+    char groupbasedn[STRING_MAX] = "ou=groups,";
     int limit = req->sizeLimit;
 
+    /* Get the basedn's for passwd and group data. */
+    strcat(passwdbasedn, basedn);
+    strcat(groupbasedn, basedn);
     /* Adjust limit to RESPONSE_MAX if it is zero or too large. */
     limit = (limit && (limit < RESPONSE_MAX)) ? limit : RESPONSE_MAX;
     LDAPMessage_t *msg = ldap_response_add(res);
     /* Add all the matching entries. */
-    if (!bad_dn && !bad_filter) {
+    if (!bad_filter && strends(passwdbasedn, reqbasedn)) {
         passwd_t *pw;
         while ((pw = getpwent()) && (res->count <= limit)) {
             msg->messageID = msgid;
@@ -120,6 +124,8 @@ void ldap_response_search(ldap_response *res, const char *basedn, const bool isr
             }
         }
         endpwent();
+    }
+    if (!bad_filter && strends(groupbasedn, reqbasedn)) {
         group_t *gr;
         while ((gr = getgrent()) && (res->count <= limit)) {
             msg->messageID = msgid;
@@ -141,10 +147,7 @@ void ldap_response_search(ldap_response *res, const char *basedn, const bool isr
     msg->messageID = msgid;
     msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResDone;
     SearchResultDone_t *done = &msg->protocolOp.choice.searchResDone;
-    if (bad_dn) {
-        done->resultCode = LDAPResult__resultCode_other;
-        LDAPString_set(&done->diagnosticMessage, "baseobject is invalid");
-    } else if (bad_filter) {
+    if (bad_filter) {
         done->resultCode = LDAPResult__resultCode_other;
         LDAPString_set(&done->diagnosticMessage, "filter not supported");
     } else {

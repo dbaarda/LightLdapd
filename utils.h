@@ -27,4 +27,13 @@
 /** Get a uid from a user name. */
 #define name2uid(n) ({struct passwd *_p=getpwnam(n); if (!_p) errx(EX_OSERR, "User not found: %s", n); _p->pw_uid;})
 
+/* Test if a string ends with another string. */
+static inline bool strends(const char *s, const char *e)
+{
+    int sl = strlen(s);
+    int el = strlen(e);
+
+    return el <= sl && strcmp(s + sl - el, e) == 0;
+}
+
 #endif                          /* LIGHTLDAPD_UTILS_H */
