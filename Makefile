@@ -7,7 +7,7 @@ LDFLAGS=-lev -lpam
 .PHONY: all debug clean install debian debclean tidy
 
 all: asn1/LDAP.a
-	$(CC) -Iasn1/ $(CFLAGS) $(LDFLAGS) main.c pam.c nss2ldap.c $^ -o $(TARGET)
+	$(CC) -Iasn1/ $(CFLAGS) $(LDFLAGS) main.c ldap_server.c pam.c nss2ldap.c $^ -o $(TARGET)
 
 asn1/LDAP.a: asn1
 	cd asn1 && $(CC) -I. $(CFLAGS) -c *.c
