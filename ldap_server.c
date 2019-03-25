@@ -250,7 +250,7 @@ void ldap_request_init(ldap_connection *connection)
 
 void ldap_request_done(ldap_connection *connection)
 {
-    ldapmessage_free(connection->request);
+    LDAPMessage_free(connection->request);
     ldap_response_done(&connection->response);
 }
 

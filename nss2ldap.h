@@ -13,10 +13,10 @@
 #define RESPONSE_MAX 100000     /**< The max results in any response. */
 
 /** Destroy and free an LDAPMessage instance. */
-#define ldapmessage_free(msg) ASN_STRUCT_FREE(asn_DEF_LDAPMessage, msg)
+#define LDAPMessage_free(msg) ASN_STRUCT_FREE(asn_DEF_LDAPMessage, msg)
 
 /** Destroy an LDAPMessage freeing its contents only. */
-#define ldapmessage_empty(msg) ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_LDAPMessage, msg)
+#define LDAPMessage_done(msg) ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_LDAPMessage, msg)
 
 #ifdef DEBUG
 #define LDAP_DEBUG(msg) asn_fprint(stdout, &asn_DEF_LDAPMessage, msg)

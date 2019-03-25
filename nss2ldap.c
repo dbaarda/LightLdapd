@@ -82,7 +82,7 @@ void ldap_response_inc(ldap_response *res)
     assert(next);
 
     res->next = next->next;
-    ldapmessage_empty(&next->msg);
+    LDAPMessage_done(&next->msg);
     free(next);
 }
 
@@ -118,7 +118,7 @@ void ldap_response_search(ldap_response *res, const char *basedn, const bool isr
                 msg = ldap_response_add(res);
             } else {
                 /* Empty and wipe the entry message for the next one. */
-                ldapmessage_empty(msg);
+                LDAPMessage_done(msg);
                 memset(msg, 0, sizeof(*msg));
             }
         }
@@ -136,7 +136,7 @@ void ldap_response_search(ldap_response *res, const char *basedn, const bool isr
                 msg = ldap_response_add(res);
             } else {
                 /* Empty and wipe the entry message for the next one. */
-                ldapmessage_empty(msg);
+                LDAPMessage_done(msg);
                 memset(msg, 0, sizeof(*msg));
             }
         }
