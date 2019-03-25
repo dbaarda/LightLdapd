@@ -49,6 +49,7 @@ typedef struct {
     ldap_status_t request_status;
     ldap_response response;
     ldap_status_t response_status;
+    ev_tstamp delay;            /**< The delay time to pause for. */
     buffer_t recv_buf;          /**< The buffer for incoming data. */
     buffer_t send_buf;          /**< The buffer for outgoing data. */
 } ldap_connection;

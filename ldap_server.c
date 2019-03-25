@@ -95,6 +95,7 @@ ldap_connection *ldap_connection_new(ldap_server *server, int fd)
     connection->write_watcher.data = connection;
     ev_init(&connection->delay_watcher, delay_cb);
     connection->delay_watcher.data = connection;
+    connection->delay = 0.0;
     buffer_init(&connection->recv_buf);
     buffer_init(&connection->send_buf);
     ldap_request_init(connection);
@@ -132,7 +133,11 @@ void ldap_connection_respond(ldap_connection *connection)
         ldap_connection_free(connection);
         return;
     }
-    if (buffer_full(&connection->recv_buf)) {
+    if (connection->delay && !ev_is_active(&connection->delay_watcher)) {
+        ev_timer_set(&connection->delay_watcher, connection->delay, 0.0);
+        ev_timer_start(server->loop, &connection->delay_watcher);
+    }
+    if (connection->delay || buffer_full(&connection->recv_buf)) {
         ev_io_stop(server->loop, &connection->read_watcher);
     } else {
         ev_io_start(server->loop, &connection->read_watcher);
@@ -237,6 +242,7 @@ void delay_cb(ev_loop *loop, ev_timer *watcher, int revents)
     assert(connection->server->loop == loop);
     assert(&connection->delay_watcher == watcher);
 
+    connection->delay = 0.0;
     ldap_connection_respond(connection);
 }
 
@@ -277,11 +283,7 @@ ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequ
     ldap_server *server = connection->server;
     ldap_response *response = &connection->response;
     LDAPMessage_t *msg = ldap_response_get(response);
-    ev_tstamp delay = 0.0;
 
-    /* If the delay is active, do nothing and return RC_WMORE to try again. */
-    if (ev_is_active(&connection->delay_watcher))
-        return RC_WMORE;
     /* If we have not built the response, build it first. */
     if (!msg) {
         msg = ldap_response_add(response);
@@ -300,7 +302,7 @@ ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequ
             char status[PAMMSG_LEN] = "";
             if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
                 bindResponse->resultCode = BindResponse__resultCode_invalidDNSyntax;
-            } else if (PAM_SUCCESS != auth_pam(user, pw, status, &delay)) {
+            } else if (PAM_SUCCESS != auth_pam(user, pw, status, &connection->delay)) {
                 bindResponse->resultCode = BindResponse__resultCode_invalidCredentials;
                 LDAPString_set(&bindResponse->diagnosticMessage, status);
             } else {            /* Success! */
@@ -311,14 +313,9 @@ ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequ
             /* sasl or anonymous auth */
             bindResponse->resultCode = BindResponse__resultCode_authMethodNotSupported;
         }
-        /* If delay was set, pause response by starting delay watcher. */
-        if (delay > 0.0) {
-            ev_timer_set(&connection->delay_watcher, delay, 0.0);
-            ev_timer_start(server->loop, &connection->delay_watcher);
-            return RC_WMORE;
-        }
     }
-    return ldap_connection_send(connection, msg);
+    /* If delay return RC_WMORE, otherwise send the message. */
+    return connection->delay ? RC_WMORE : ldap_connection_send(connection, msg);
 }
 
 ldap_status_t ldap_request_search(ldap_connection *connection, int msgid, SearchRequest_t *req)
