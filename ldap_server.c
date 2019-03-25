@@ -244,7 +244,7 @@ void ldap_request_init(ldap_connection *connection)
 {
     connection->request = NULL;
     connection->request_status = RC_WMORE;
-    ldap_response_init(&connection->response, 1);
+    ldap_response_init(&connection->response);
     connection->response_status = RC_WMORE;
 }
 

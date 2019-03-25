@@ -35,15 +35,12 @@ static bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *re
 static bool Filter_ok(const Filter_t *filter);
 
 /* Initialize an ldap_reponse. */
-void ldap_response_init(ldap_response *res, int size)
+void ldap_response_init(ldap_response *res)
 {
     assert(res);
-    assert(size > 0);
 
     res->count = 0;
-    res->next = 0;
-    res->size = size;
-    res->msgs = XNEW0(LDAPMessage_t *, size);
+    res->next = res->last = NULL;
 }
 
 /* Destroy an ldap_response. */
@@ -51,22 +48,22 @@ void ldap_response_done(ldap_response *res)
 {
     assert(res);
 
-    for (int i = 0; i < res->count; i++)
-        ldapmessage_free(res->msgs[i]);
-    free(res->msgs);
+    while (res->next)
+        ldap_response_inc(res);
 }
 
 /* Add an LDAPMessage to an ldap_response. */
 LDAPMessage_t *ldap_response_add(ldap_response *res)
 {
     assert(res);
+    LDAPMessageSList_t *last = XNEW0(LDAPMessageSList_t, 1);
 
-    /* Double the allocated size if full. */
-    if (res->count == res->size) {
-        res->size *= 2;
-        res->msgs = XRENEW(res->msgs, LDAPMessage_t *, res->size);
-    }
-    return res->msgs[res->count++] = XNEW0(LDAPMessage_t, 1);
+    res->count++;
+    if (res->next)
+        res->last = res->last->next = last;
+    else
+        res->last = res->next = last;
+    return &last->msg;
 }
 
 /* Get the next LDAPMessage_t to send. */
@@ -74,17 +71,19 @@ LDAPMessage_t *ldap_response_get(ldap_response *res)
 {
     assert(res);
 
-    if (res->next < res->count)
-        return res->msgs[res->next];
-    return NULL;
+    return res->next ? &res->next->msg : NULL;
 }
 
 /* Increment the next LDAPMessage_t to send. */
 void ldap_response_inc(ldap_response *res)
 {
     assert(res);
+    LDAPMessageSList_t *next = res->next;
+    assert(next);
 
-    res->next++;
+    res->next = next->next;
+    ldapmessage_empty(&next->msg);
+    free(next);
 }
 
 /* Get the ldap_response for a SearchRequest message. */

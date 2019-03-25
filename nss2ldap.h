@@ -30,21 +30,24 @@
 /** Set an LDAPString instance from a string. */
 #define LDAPString_set(str, s) OCTET_STRING_fromString((str), (s));
 
+/** An LDAPMessage singly-linked list entry. */
+typedef struct LDAPMessageSList_s LDAPMessageSList_t;
+struct LDAPMessageSList_s {
+    LDAPMessageSList_t *next;
+    LDAPMessage_t msg;
+};
+
 /** A collection of LDAPMessages that make up an ldap response. */
 typedef struct {
-    int count;                  /**< The number of LDAPMessages in the
-                                 * response. */
-    int next;                   /**< The index of the next message to send. */
-    int size;                   /**< The allocated size of **replies. */
-    LDAPMessage_t **msgs;       /**< Array of LDAPMessages in the reply. */
+    int count;                  /**< The count of messages in the response. */
+    LDAPMessageSList_t *next;   /**< The next LDAPMessageSList entry. */
+    LDAPMessageSList_t *last;   /**< The last LDAPMessageSList entry. */
 } ldap_response;
 
 /** Initialize an ldap_reponse.
  *
- * \param *res - the ldap_response to initialize.
- *
- * \param size - the initial size to allocate. */
-void ldap_response_init(ldap_response *res, int size);
+ * \param *res - the ldap_response to initialize. */
+void ldap_response_init(ldap_response *res);
 
 /** Destroy an ldap_response.
  *
