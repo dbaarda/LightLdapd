@@ -28,7 +28,7 @@ void buffer_consumed(buffer_t *buffer, size_t len);
 typedef struct {
     char *basedn;               /**< The ldap basedn to use. */
     uid_t rootuid;              /**< The uid of admin "root" user. */
-    bool anonok;             /**< If anonymous bind is allowed. */
+    bool anonok;                /**< If anonymous bind is allowed. */
     ev_loop *loop;              /**< The libev loop to use. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
 } ldap_server;
