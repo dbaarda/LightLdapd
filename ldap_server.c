@@ -40,11 +40,11 @@ void buffer_consumed(buffer_t *buffer, size_t len)
     }
 }
 
-void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonymous)
+void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonok)
 {
     server->basedn = basedn;
     server->rootuid = rootuid;
-    server->anonymous = anonymous;
+    server->anonok = anonok;
     server->loop = loop;
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
@@ -289,7 +289,7 @@ ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequ
         msg->protocolOp.present = LDAPMessage__protocolOp_PR_bindResponse;
         BindResponse_t *bindResponse = &msg->protocolOp.choice.bindResponse;
         LDAPString_set(&bindResponse->matchedDN, (const char *)req->name.buf);
-        if (server->anonymous && req->name.size == 0) {
+        if (server->anonok && req->name.size == 0) {
             /* allow anonymous */
             bindResponse->resultCode = BindResponse__resultCode_success;
             connection->binduid = -1;

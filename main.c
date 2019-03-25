@@ -15,7 +15,7 @@ int setting_daemon = 0;
 int setting_loopback = 0;
 uid_t setting_rootuid = 0;
 uid_t setting_setuid = 0;
-bool setting_anonymous = 0;
+bool setting_anonok = 0;
 void settings(int argc, char **argv);
 
 int main(int argc, char **argv)
@@ -28,7 +28,7 @@ int main(int argc, char **argv)
     server_addr = setting_loopback ? INADDR_LOOPBACK : INADDR_ANY;
     if (setting_daemon && daemon(0, 0))
         fail1("daemon", 1);
-    ldap_server_init(&server, loop, setting_basedn, setting_rootuid, setting_anonymous);
+    ldap_server_init(&server, loop, setting_basedn, setting_rootuid, setting_anonok);
     if (ldap_server_start(&server, server_addr, setting_port) < 0)
         fail1("ldap_server_start", 1);
     if (setting_setuid && setuid(setting_setuid))
@@ -44,7 +44,7 @@ void settings(int argc, char **argv)
     while ((c = getopt(argc, argv, "ab:dlp:r:u:")) != -1) {
         switch (c) {
         case 'a':
-            setting_anonymous = true;
+            setting_anonok = true;
             break;
         case 'b':
             setting_basedn = optarg;
