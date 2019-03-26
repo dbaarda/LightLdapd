@@ -24,12 +24,6 @@
 #define LDAP_DEBUG(msg)
 #endif
 
-/** Allocate and initialize an LDAPString instance. */
-#define LDAPString_new(s) OCTET_STRING_new_fromBuf(&asn_DEF_LDAPString, (s), -1)
-
-/** Set an LDAPString instance from a string. */
-#define LDAPString_set(str, s) OCTET_STRING_fromString((str), (s));
-
 /** An LDAPMessage singly-linked list entry. */
 typedef struct LDAPMessageSList_s LDAPMessageSList_t;
 struct LDAPMessageSList_s {
@@ -72,6 +66,24 @@ LDAPMessage_t *ldap_response_get(ldap_response *res);
  *
  * \param *res - the ldap_response to increment. */
 void ldap_response_inc(ldap_response *res);
+
+/** Get the ldap_response for a BindRequest message.
+ *
+ * \param res - The ldap_response to add the replies to.
+ *
+ * \param basedn - The basedn to use.
+ *
+ * \param anonok - If the anonymous auth is permitted.
+ *
+ * \param msgid - The messageID of the request.
+ *
+ * \param req - The BindRequest to respond to.
+ *
+ * \param binduid - The returned uid bound to.
+ *
+ * \param delay - The returned delay time for a failed bind. */
+void ldap_response_bind(ldap_response *res, const char *basedn, const bool anonok, const int msgid,
+                        const BindRequest_t *req, uid_t *binduid, double *delay);
 
 /** Get the ldap_response for a SearchRequest message.
  *

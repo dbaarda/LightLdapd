@@ -5,6 +5,7 @@
  */
 
 #include "nss2ldap.h"
+#include "pam.h"
 #include <grp.h>
 #include <pwd.h>
 #include <shadow.h>
@@ -13,6 +14,10 @@
 typedef struct passwd passwd_t;
 typedef struct group group_t;
 typedef struct spwd spwd_t;
+
+/* LDAPString methods. */
+#define LDAPString_new(s) OCTET_STRING_new_fromBuf(&asn_DEF_LDAPString, (s), -1)
+#define LDAPString_set(str, s) OCTET_STRING_fromString((str), (s));
 
 /* PartialAttribute methods. */
 static PartialAttribute_t *PartialAttribute_new(const char *type);
@@ -86,13 +91,52 @@ void ldap_response_inc(ldap_response *res)
     free(next);
 }
 
+/* Get the ldap_response for a BindRequest message. */
+void ldap_response_bind(ldap_response *res, const char *basedn, const bool anonok, const int msgid,
+                        const BindRequest_t *req, uid_t *binduid, double *delay)
+{
+    assert(res);
+    assert(basedn);
+    assert(req);
+    assert(binduid);
+    assert(delay);
+    LDAPMessage_t *msg = ldap_response_add(res);
+
+    msg->messageID = msgid;
+    msg->protocolOp.present = LDAPMessage__protocolOp_PR_bindResponse;
+    BindResponse_t *reply = &msg->protocolOp.choice.bindResponse;
+    LDAPString_set(&reply->matchedDN, (const char *)req->name.buf);
+    if (anonok && req->name.size == 0) {
+        /* allow anonymous */
+        reply->resultCode = BindResponse__resultCode_success;
+        *binduid = -1;
+    } else if (req->authentication.present == AuthenticationChoice_PR_simple) {
+        /* simple auth */
+        char user[PWNAME_MAX];
+        char *pw = (char *)req->authentication.choice.simple.buf;
+        char status[PAMMSG_LEN] = "";
+        if (!dn2name(basedn, (const char *)req->name.buf, user)) {
+            reply->resultCode = BindResponse__resultCode_invalidDNSyntax;
+        } else if (PAM_SUCCESS != auth_pam(user, pw, status, delay)) {
+            reply->resultCode = BindResponse__resultCode_invalidCredentials;
+            LDAPString_set(&reply->diagnosticMessage, status);
+        } else {                /* Success! */
+            reply->resultCode = BindResponse__resultCode_success;
+            *binduid = name2uid(user);
+        }
+    } else {
+        /* sasl or anonymous auth */
+        reply->resultCode = BindResponse__resultCode_authMethodNotSupported;
+    }
+}
+
 /* Get the ldap_response for a SearchRequest message. */
 void ldap_response_search(ldap_response *res, const char *basedn, const bool isroot, const int msgid,
                           const SearchRequest_t *req)
 {
-    assert(req);
-    assert(basedn);
     assert(res);
+    assert(basedn);
+    assert(req);
     const bool bad_filter = !Filter_ok(&req->filter);
     const char *reqbasedn = (const char *)req->baseObject.buf;
     char passwdbasedn[STRING_MAX] = "ou=people,";

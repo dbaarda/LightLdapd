@@ -6,8 +6,6 @@
  */
 
 #include "ldap_server.h"
-#include "nss2ldap.h"
-#include "pam.h"
 #include <unistd.h>
 
 #define LISTENQ 128
@@ -153,6 +151,9 @@ ldap_status_t ldap_connection_send(ldap_connection *connection, LDAPMessage_t *m
     buffer_t *buf = &connection->send_buf;
     asn_enc_rval_t rencode;
 
+    /* Send nothing if connection is delayed. */
+    if (connection->delay)
+        return RC_WMORE;
     rencode = der_encode_to_buffer(&asn_DEF_LDAPMessage, msg, buffer_wpos(buf), buffer_wlen(buf));
     /* If it failed the buffer was full, return RC_WMORE to try again. */
     if (rencode.encoded == -1)
@@ -167,6 +168,9 @@ ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **
     buffer_t *buf = &connection->recv_buf;
     asn_dec_rval_t rdecode;
 
+    /* Recv nothing if connection is delayed. */
+    if (connection->delay)
+        return RC_WMORE;
     /* from asn1c's FAQ: If you want BER or DER encoding, use der_encode(). */
     rdecode = ber_decode(0, &asn_DEF_LDAPMessage, (void **)msg, buffer_rpos(buf), buffer_rlen(buf));
     buffer_consumed(buf, rdecode.consumed);
@@ -262,64 +266,7 @@ void ldap_request_done(ldap_connection *connection)
 
 ldap_status_t ldap_request_reply(ldap_connection *connection, LDAPMessage_t *req)
 {
-    switch (req->protocolOp.present) {
-    case LDAPMessage__protocolOp_PR_bindRequest:
-        return ldap_request_bind(connection, req->messageID, &req->protocolOp.choice.bindRequest);
-    case LDAPMessage__protocolOp_PR_searchRequest:
-        return ldap_request_search(connection, req->messageID, &req->protocolOp.choice.searchRequest);
-    case LDAPMessage__protocolOp_PR_abandonRequest:
-        /* Ignore abandonRequest; the request has completed already. */
-        return RC_OK;
-    case LDAPMessage__protocolOp_PR_unbindRequest:
-        return RC_FAIL;
-    default:
-        perror("_|_");
-        return RC_FAIL;
-    }
-}
-
-ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequest_t *req)
-{
-    ldap_server *server = connection->server;
-    ldap_response *response = &connection->response;
-    LDAPMessage_t *msg = ldap_response_get(response);
-
-    /* If we have not built the response, build it first. */
-    if (!msg) {
-        msg = ldap_response_add(response);
-        msg->messageID = msgid;
-        msg->protocolOp.present = LDAPMessage__protocolOp_PR_bindResponse;
-        BindResponse_t *bindResponse = &msg->protocolOp.choice.bindResponse;
-        LDAPString_set(&bindResponse->matchedDN, (const char *)req->name.buf);
-        if (server->anonok && req->name.size == 0) {
-            /* allow anonymous */
-            bindResponse->resultCode = BindResponse__resultCode_success;
-            connection->binduid = -1;
-        } else if (req->authentication.present == AuthenticationChoice_PR_simple) {
-            /* simple auth */
-            char user[PWNAME_MAX];
-            char *pw = (char *)req->authentication.choice.simple.buf;
-            char status[PAMMSG_LEN] = "";
-            if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
-                bindResponse->resultCode = BindResponse__resultCode_invalidDNSyntax;
-            } else if (PAM_SUCCESS != auth_pam(user, pw, status, &connection->delay)) {
-                bindResponse->resultCode = BindResponse__resultCode_invalidCredentials;
-                LDAPString_set(&bindResponse->diagnosticMessage, status);
-            } else {            /* Success! */
-                bindResponse->resultCode = BindResponse__resultCode_success;
-                connection->binduid = name2uid(user);
-            }
-        } else {
-            /* sasl or anonymous auth */
-            bindResponse->resultCode = BindResponse__resultCode_authMethodNotSupported;
-        }
-    }
-    /* If delay return RC_WMORE, otherwise send the message. */
-    return connection->delay ? RC_WMORE : ldap_connection_send(connection, msg);
-}
-
-ldap_status_t ldap_request_search(ldap_connection *connection, int msgid, SearchRequest_t *req)
-{
+    assert(connection);
     ldap_server *server = connection->server;
     ldap_response *response = &connection->response;
     ldap_status_t status = RC_WMORE;
@@ -327,8 +274,29 @@ ldap_status_t ldap_request_search(ldap_connection *connection, int msgid, Search
     bool isroot = server->rootuid == connection->binduid;
 
     /* If we have not built the response, build it first. */
-    if (!response->count)
-        ldap_response_search(response, server->basedn, isroot, msgid, req);
+    if (!response->count) {
+        switch (req->protocolOp.present) {
+        case LDAPMessage__protocolOp_PR_bindRequest:
+            ldap_response_bind(response, server->basedn, server->anonok, req->messageID,
+                               &req->protocolOp.choice.bindRequest, &connection->binduid, &connection->delay);
+	    break;
+        case LDAPMessage__protocolOp_PR_searchRequest:
+            ldap_response_search(response, server->basedn, isroot, req->messageID,
+                                 &req->protocolOp.choice.searchRequest);
+	    break;
+        case LDAPMessage__protocolOp_PR_abandonRequest:
+            /* Ignore abandonRequest; the request has completed already. */
+            return RC_OK;
+        case LDAPMessage__protocolOp_PR_unbindRequest:
+            /* Fail unbindRequest so we close the connection. */
+            return RC_FAIL;
+        default:
+            /* Fail any unknown requests to close the connection. */
+            perror("_|_");
+            return RC_FAIL;
+        }
+    }
+    /* Send reply messages until blocked. */
     while ((msg = ldap_response_get(response)) && (status = ldap_connection_send(connection, msg)) == RC_OK)
         ldap_response_inc(response);
     return status;

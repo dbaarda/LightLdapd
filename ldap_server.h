@@ -62,5 +62,3 @@ ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **
 void ldap_request_init(ldap_connection *connection);
 void ldap_request_done(ldap_connection *connection);
 ldap_status_t ldap_request_reply(ldap_connection *connection, LDAPMessage_t *req);
-ldap_status_t ldap_request_bind(ldap_connection *connection, int msgid, BindRequest_t *req);
-ldap_status_t ldap_request_search(ldap_connection *connection, int msgid, SearchRequest_t *req);
