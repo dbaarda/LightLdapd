@@ -45,10 +45,8 @@ typedef struct {
     ev_io read_watcher;         /**< The libev data read watcher. */
     ev_io write_watcher;        /**< The libev data write watcher. */
     ev_timer delay_watcher;     /**< The libev failed bind delay watcher. */
-    LDAPMessage_t *request;
-    ldap_status_t request_status;
-    ldap_response response;
-    ldap_status_t response_status;
+    LDAPMessage_t *recv_msg;    /**< The incoming message being decoded */
+    ldap_response response;     /**< The outgoing response being sent. */
     ev_tstamp delay;            /**< The delay time to pause for. */
     buffer_t recv_buf;          /**< The buffer for incoming data. */
     buffer_t send_buf;          /**< The buffer for outgoing data. */

@@ -114,20 +114,17 @@ void ldap_connection_free(ldap_connection *connection)
 void ldap_connection_respond(ldap_connection *connection)
 {
     ldap_server *server = connection->server;
-    LDAPMessage_t **req = &connection->request;
+    LDAPMessage_t **req = &connection->recv_msg;
+    ldap_response *rsp = &connection->response;
+    ldap_status_t status;
 
     /* Recieve and reply to requests until blocked on recv or reply. */
-    do {
-        if (connection->response_status == RC_OK) {
-            ldap_request_done(connection);
-            ldap_request_init(connection);
-        }
-        if (connection->request_status == RC_WMORE)
-            connection->request_status = ldap_connection_recv(connection, req);
-        if (connection->request_status == RC_OK)
-            connection->response_status = ldap_request_reply(connection, *req);
-    } while (connection->response_status == RC_OK);
-    if (connection->request_status == RC_FAIL || connection->response_status == RC_FAIL) {
+    while ((rsp->count || (status = ldap_connection_recv(connection, req)) == RC_OK)
+           && (status = ldap_request_reply(connection, *req)) == RC_OK) {
+        ldap_request_done(connection);
+        ldap_request_init(connection);
+    }
+    if (status == RC_FAIL) {
         ldap_connection_free(connection);
         return;
     }
@@ -252,15 +249,13 @@ void delay_cb(ev_loop *loop, ev_timer *watcher, int revents)
 
 void ldap_request_init(ldap_connection *connection)
 {
-    connection->request = NULL;
-    connection->request_status = RC_WMORE;
+    connection->recv_msg = NULL;
     ldap_response_init(&connection->response);
-    connection->response_status = RC_WMORE;
 }
 
 void ldap_request_done(ldap_connection *connection)
 {
-    LDAPMessage_free(connection->request);
+    LDAPMessage_free(connection->recv_msg);
     ldap_response_done(&connection->response);
 }
 
@@ -279,11 +274,11 @@ ldap_status_t ldap_request_reply(ldap_connection *connection, LDAPMessage_t *req
         case LDAPMessage__protocolOp_PR_bindRequest:
             ldap_response_bind(response, server->basedn, server->anonok, req->messageID,
                                &req->protocolOp.choice.bindRequest, &connection->binduid, &connection->delay);
-	    break;
+            break;
         case LDAPMessage__protocolOp_PR_searchRequest:
             ldap_response_search(response, server->basedn, isroot, req->messageID,
                                  &req->protocolOp.choice.searchRequest);
-	    break;
+            break;
         case LDAPMessage__protocolOp_PR_abandonRequest:
             /* Ignore abandonRequest; the request has completed already. */
             return RC_OK;
