@@ -25,6 +25,10 @@ void buffer_consumed(buffer_t *buffer, size_t len);
 #define buffer_empty(buffer) (!(buffer)->len)
 #define buffer_full(buffer) ((buffer)->len == BUFFER_SIZE)
 
+/* Pre-declare types needed for forward referencing. */
+typedef struct ldap_request ldap_request;
+
+/** The ldap_server class. */
 typedef struct {
     char *basedn;               /**< The ldap basedn to use. */
     uid_t rootuid;              /**< The uid of admin "root" user. */
@@ -39,6 +43,7 @@ void ldap_server_stop(ldap_server *server);
 /* Reuse the ber_decode return value enum as the ldap recv/send status. */
 typedef enum asn_dec_rval_code_e ldap_status_t;
 
+/** The ldap_connection class. */
 typedef struct {
     ldap_server *server;        /**< The server for this connection. */
     uid_t binduid;              /**< The uid the client binded to. */
@@ -46,7 +51,7 @@ typedef struct {
     ev_io write_watcher;        /**< The libev data write watcher. */
     ev_timer delay_watcher;     /**< The libev failed bind delay watcher. */
     LDAPMessage_t *recv_msg;    /**< The incoming message being decoded */
-    ldap_response response;     /**< The outgoing response being sent. */
+    ldap_request *request;      /**< The circular dlist of requests. */
     ev_tstamp delay;            /**< The delay time to pause for. */
     buffer_t recv_buf;          /**< The buffer for incoming data. */
     buffer_t send_buf;          /**< The buffer for outgoing data. */
@@ -57,6 +62,18 @@ void ldap_connection_respond(ldap_connection *connection);
 ldap_status_t ldap_connection_send(ldap_connection *connection, LDAPMessage_t *msg);
 ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **msg);
 
-void ldap_request_init(ldap_connection *connection);
-void ldap_request_done(ldap_connection *connection);
-ldap_status_t ldap_request_reply(ldap_connection *connection, LDAPMessage_t *req);
+/** The ldap_request class. */
+struct ldap_request {
+    ldap_request *next, *prev;  /**< The circular dlist pointers. */
+    ldap_connection *connection;        /**< The connection for this request. */
+    LDAPMessage_t *message;     /**< The recieved request message. */
+    ldap_response response;     /**< The response for this request. */
+};
+ldap_request *ldap_request_new(ldap_connection *connection, LDAPMessage_t *msg);
+void ldap_request_free(ldap_request *request);
+ldap_request *ldap_request_bind(ldap_connection *connection, LDAPMessage_t *msg);
+ldap_request *ldap_request_search(ldap_connection *connection, LDAPMessage_t *msg);
+void ldap_request_abandon(ldap_connection *connection, LDAPMessage_t *msg);
+ldap_status_t ldap_request_respond(ldap_request *request);
+#define ENTRY ldap_request
+#include "dlist.h"

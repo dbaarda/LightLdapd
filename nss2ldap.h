@@ -24,18 +24,19 @@
 #define LDAP_DEBUG(msg)
 #endif
 
-/** An LDAPMessage singly-linked list entry. */
-typedef struct LDAPMessageSList_s LDAPMessageSList_t;
-struct LDAPMessageSList_s {
-    LDAPMessageSList_t *next;
+/** An ldap reply message circular dlist entry. */
+typedef struct ldap_reply ldap_reply;
+struct ldap_reply {
+    ldap_reply *next, *prev;
     LDAPMessage_t msg;
 };
+#define ENTRY ldap_reply
+#include "dlist.h"
 
 /** A collection of LDAPMessages that make up an ldap response. */
 typedef struct {
     int count;                  /**< The count of messages in the response. */
-    LDAPMessageSList_t *next;   /**< The next LDAPMessageSList entry. */
-    LDAPMessageSList_t *last;   /**< The last LDAPMessageSList entry. */
+    ldap_reply *reply;          /**< The circular dlist of replies. */
 } ldap_response;
 
 /** Initialize an ldap_reponse.

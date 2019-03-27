@@ -93,10 +93,11 @@ ldap_connection *ldap_connection_new(ldap_server *server, int fd)
     connection->write_watcher.data = connection;
     ev_init(&connection->delay_watcher, delay_cb);
     connection->delay_watcher.data = connection;
+    connection->recv_msg = NULL;
+    connection->request = NULL;
     connection->delay = 0.0;
     buffer_init(&connection->recv_buf);
     buffer_init(&connection->send_buf);
-    ldap_request_init(connection);
     ev_io_start(server->loop, &connection->read_watcher);
     return connection;
 }
@@ -107,36 +108,55 @@ void ldap_connection_free(ldap_connection *connection)
     ev_io_stop(connection->server->loop, &connection->write_watcher);
     ev_timer_stop(connection->server->loop, &connection->delay_watcher);
     close(connection->read_watcher.fd);
-    ldap_request_done(connection);
+    LDAPMessage_free(connection->recv_msg);
+    while (connection->request)
+        ldap_request_free(connection->request);
     free(connection);
 }
 
 void ldap_connection_respond(ldap_connection *connection)
 {
+    assert(connection);
     ldap_server *server = connection->server;
-    LDAPMessage_t **req = &connection->recv_msg;
-    ldap_response *rsp = &connection->response;
+    LDAPMessage_t **msg = &connection->recv_msg;
     ldap_status_t status;
 
-    /* Recieve and reply to requests until blocked on recv or reply. */
-    while ((rsp->count || (status = ldap_connection_recv(connection, req)) == RC_OK)
-           && (status = ldap_request_reply(connection, *req)) == RC_OK) {
-        ldap_request_done(connection);
-        ldap_request_init(connection);
+    /* While we've recieved a message, add a request. */
+    while ((status = ldap_connection_recv(connection, msg)) == RC_OK) {
+        switch ((*msg)->protocolOp.present) {
+            /* For known request types, create a new request. */
+        case LDAPMessage__protocolOp_PR_bindRequest:
+            ldap_request_bind(connection, *msg);
+            break;
+        case LDAPMessage__protocolOp_PR_searchRequest:
+            ldap_request_search(connection, *msg);
+            break;
+        case LDAPMessage__protocolOp_PR_abandonRequest:
+            ldap_request_abandon(connection, *msg);
+            break;
+        default:
+            /* For unknown or unbindRequest, close the connection. */
+            return ldap_connection_free(connection);
+        }
+        *msg = NULL;
     }
-    if (status == RC_FAIL) {
-        ldap_connection_free(connection);
-        return;
-    }
+    /* If we got an error recieving messages, close the connection. */
+    if (status == RC_FAIL)
+        return ldap_connection_free(connection);
+    /* While there's a request and we are not blocked, respond to the request. */
+    while (connection->request && (status = ldap_request_respond(connection->request)) == RC_OK) ;
+    /* If we got an error sending messages, close the connection. */
+    if (status == RC_FAIL)
+        return ldap_connection_free(connection);
+    /* Update the state of all the connection watchers. */
     if (connection->delay && !ev_is_active(&connection->delay_watcher)) {
         ev_timer_set(&connection->delay_watcher, connection->delay, 0.0);
         ev_timer_start(server->loop, &connection->delay_watcher);
     }
-    if (connection->delay || buffer_full(&connection->recv_buf)) {
+    if (connection->delay || buffer_full(&connection->recv_buf))
         ev_io_stop(server->loop, &connection->read_watcher);
-    } else {
+    else
         ev_io_start(server->loop, &connection->read_watcher);
-    }
     if (buffer_empty(&connection->send_buf))
         ev_io_stop(server->loop, &connection->write_watcher);
     else
@@ -247,52 +267,92 @@ void delay_cb(ev_loop *loop, ev_timer *watcher, int revents)
     ldap_connection_respond(connection);
 }
 
-void ldap_request_init(ldap_connection *connection)
-{
-    connection->recv_msg = NULL;
-    ldap_response_init(&connection->response);
-}
-
-void ldap_request_done(ldap_connection *connection)
-{
-    LDAPMessage_free(connection->recv_msg);
-    ldap_response_done(&connection->response);
-}
-
-ldap_status_t ldap_request_reply(ldap_connection *connection, LDAPMessage_t *req)
+/* Allocate and initialize a bare ldap_request from a request message. */
+ldap_request *ldap_request_new(ldap_connection *connection, LDAPMessage_t *msg)
 {
     assert(connection);
+    assert(msg);
+    ldap_request *request = XNEW0(ldap_request, 1);
+
+    request->connection = connection;
+    request->message = msg;
+    ldap_response_init(&request->response);
+    /* Add the request to the connection's circular dlist. */
+    ldap_request_add(&connection->request, request);
+    return request;
+}
+
+/* Destroy and free an ldap_response. */
+void ldap_request_free(ldap_request *request)
+{
+    if (request) {
+        /* Remove the request from the connection's circular dlist. */
+        ldap_connection *connection = request->connection;
+        ldap_request_rem(&connection->request, request);
+        LDAPMessage_free(request->message);
+        ldap_response_done(&request->response);
+        free(request);
+    }
+}
+
+/* Allocate and initialize a bind ldap_request from a bind request message. */
+ldap_request *ldap_request_bind(ldap_connection *connection, LDAPMessage_t *msg)
+{
+    assert(msg->protocolOp.present == LDAPMessage__protocolOp_PR_bindRequest);
     ldap_server *server = connection->server;
-    ldap_response *response = &connection->response;
-    ldap_status_t status = RC_WMORE;
-    LDAPMessage_t *msg;
+    ldap_request *request = ldap_request_new(connection, msg);
+    ldap_response *response = &request->response;
+
+    ldap_response_bind(response, server->basedn, server->anonok, msg->messageID, &msg->protocolOp.choice.bindRequest,
+                       &connection->binduid, &connection->delay);
+    return request;
+}
+
+/* Allocate and initialize a search ldap_request from a search request message.
+ */
+ldap_request *ldap_request_search(ldap_connection *connection, LDAPMessage_t *msg)
+{
+    assert(msg->protocolOp.present == LDAPMessage__protocolOp_PR_searchRequest);
+    ldap_server *server = connection->server;
+    ldap_request *request = ldap_request_new(connection, msg);
+    ldap_response *response = &request->response;
     bool isroot = server->rootuid == connection->binduid;
 
-    /* If we have not built the response, build it first. */
-    if (!response->count) {
-        switch (req->protocolOp.present) {
-        case LDAPMessage__protocolOp_PR_bindRequest:
-            ldap_response_bind(response, server->basedn, server->anonok, req->messageID,
-                               &req->protocolOp.choice.bindRequest, &connection->binduid, &connection->delay);
-            break;
-        case LDAPMessage__protocolOp_PR_searchRequest:
-            ldap_response_search(response, server->basedn, isroot, req->messageID,
-                                 &req->protocolOp.choice.searchRequest);
-            break;
-        case LDAPMessage__protocolOp_PR_abandonRequest:
-            /* Ignore abandonRequest; the request has completed already. */
-            return RC_OK;
-        case LDAPMessage__protocolOp_PR_unbindRequest:
-            /* Fail unbindRequest so we close the connection. */
-            return RC_FAIL;
-        default:
-            /* Fail any unknown requests to close the connection. */
-            perror("_|_");
-            return RC_FAIL;
-        }
-    }
-    /* Send reply messages until blocked. */
-    while ((msg = ldap_response_get(response)) && (status = ldap_connection_send(connection, msg)) == RC_OK)
+    ldap_response_search(response, server->basedn, isroot, msg->messageID, &msg->protocolOp.choice.searchRequest);
+    return request;
+}
+
+/* Find and abandon a request from the circular dlist. */
+void ldap_request_abandon(ldap_connection *connection, LDAPMessage_t *msg)
+{
+    assert(connection);
+    assert(msg);
+    ldap_request *l = connection->request;
+    ldap_request *e;
+    int msgid = msg->messageID;
+
+    /* Consume the message like we do for other request types. */
+    LDAPMessage_free(msg);
+    for (e = l; e; e = ldap_request_next(&l, e))
+        if (e->message->messageID == msgid)
+            return ldap_request_free(e);
+}
+
+/* Process a single reply for an ldap_response. */
+ldap_status_t ldap_request_respond(ldap_request *request)
+{
+    assert(request);
+    ldap_connection *connection = request->connection;
+    ldap_response *response = &request->response;
+    LDAPMessage_t *msg = ldap_response_get(response);
+    ldap_status_t status = RC_OK;
+
+    if (msg && (status = ldap_connection_send(connection, msg)) == RC_OK) {
+        /* Increment response to next reply and connection to next request. */
         ldap_response_inc(response);
+        connection->request = connection->request->next;
+    } else if (!msg || status == RC_FAIL)
+        /* Close and remove the request. */
+        ldap_request_free(request);
     return status;
 }

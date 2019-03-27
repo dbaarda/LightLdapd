@@ -45,7 +45,7 @@ void ldap_response_init(ldap_response *res)
     assert(res);
 
     res->count = 0;
-    res->next = res->last = NULL;
+    res->reply = NULL;
 }
 
 /* Destroy an ldap_response. */
@@ -53,7 +53,7 @@ void ldap_response_done(ldap_response *res)
 {
     assert(res);
 
-    while (res->next)
+    while (res->reply)
         ldap_response_inc(res);
 }
 
@@ -61,14 +61,11 @@ void ldap_response_done(ldap_response *res)
 LDAPMessage_t *ldap_response_add(ldap_response *res)
 {
     assert(res);
-    LDAPMessageSList_t *last = XNEW0(LDAPMessageSList_t, 1);
+    ldap_reply *reply = XNEW0(ldap_reply, 1);
 
     res->count++;
-    if (res->next)
-        res->last = res->last->next = last;
-    else
-        res->last = res->next = last;
-    return &last->msg;
+    ldap_reply_add(&res->reply, reply);
+    return &reply->msg;
 }
 
 /* Get the next LDAPMessage_t to send. */
@@ -76,19 +73,19 @@ LDAPMessage_t *ldap_response_get(ldap_response *res)
 {
     assert(res);
 
-    return res->next ? &res->next->msg : NULL;
+    return res->reply ? &res->reply->msg : NULL;
 }
 
 /* Increment the next LDAPMessage_t to send. */
 void ldap_response_inc(ldap_response *res)
 {
     assert(res);
-    LDAPMessageSList_t *next = res->next;
-    assert(next);
+    ldap_reply *reply = res->reply;
+    assert(reply);
 
-    res->next = next->next;
-    LDAPMessage_done(&next->msg);
-    free(next);
+    ldap_reply_rem(&res->reply, reply);
+    LDAPMessage_done(&reply->msg);
+    free(reply);
 }
 
 /* Get the ldap_response for a BindRequest message. */
