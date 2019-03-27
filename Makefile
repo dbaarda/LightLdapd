@@ -39,4 +39,9 @@ debclean:
 
 tidy:
 	# Reformat all code and comments to preferred coding style."
-	tidyc -ppi0 -R -C -T '/ev_\w+/' -T '/ldap_\w+/' *.[ch]
+	tidyc -ppi0 -R -C -T '/ev_\w+/' -T '/ldap_\w+/' -T 'ENTRY' *.[ch]
+
+check: CFLAGS += -DDEBUG
+check:
+	$(CC) $(CFLAGS) $(LDFLAGS) dlist_test.c -o dlist_test
+	./dlist_test

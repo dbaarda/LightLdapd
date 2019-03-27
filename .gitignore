@@ -7,5 +7,7 @@ debian/lightldapd/
 debian/files
 # The binary output.
 lightldapd
+# The test binarys.
+*_test
 # Editor backup files.
 *~
