@@ -53,8 +53,10 @@ void ldap_response_done(ldap_response *res);
  *
  * \param *res - the ldap_response to add to.
  *
+ * \param msgid - The mssageID to set.
+ *
  * \return the LDAPMessage_t added. */
-LDAPMessage_t *ldap_response_add(ldap_response *res);
+LDAPMessage_t *ldap_response_add(ldap_response *res, int msgid);
 
 /** Get the next LDAPMessage_t to send.
  *
