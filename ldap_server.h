@@ -4,9 +4,11 @@
  *
  * Licensed under the MIT License. See LICENSE file for details.
  */
+#ifndef LIGHTLDAPD_LDAP_SERVER_H
+#define LIGHTLDAPD_LDAP_SERVER_H
 
 #include "utils.h"
-#include "nss2ldap.h"
+#include "asn1/LDAPMessage.h"
 #define EV_COMPAT3 0            /* Use the ev 4.X API. */
 #include <ev.h>
 
@@ -27,6 +29,7 @@ void buffer_consumed(buffer_t *buffer, size_t len);
 
 /* Pre-declare types needed for forward referencing. */
 typedef struct ldap_request ldap_request;
+typedef struct ldap_reply ldap_reply;
 
 /** The ldap_server class. */
 typedef struct {
@@ -67,7 +70,8 @@ struct ldap_request {
     ldap_request *next, *prev;  /**< The circular dlist pointers. */
     ldap_connection *connection;        /**< The connection for this request. */
     LDAPMessage_t *message;     /**< The recieved request message. */
-    ldap_response response;     /**< The response for this request. */
+    ldap_reply *reply;          /**< The dlist of replies for this request. */
+    int count;                  /**< The count of replies for this request. */
 };
 ldap_request *ldap_request_new(ldap_connection *connection, LDAPMessage_t *msg);
 void ldap_request_free(ldap_request *request);
@@ -77,3 +81,17 @@ void ldap_request_abandon(ldap_connection *connection, LDAPMessage_t *msg);
 ldap_status_t ldap_request_respond(ldap_request *request);
 #define ENTRY ldap_request
 #include "dlist.h"
+
+/** The ldap_reply class. */
+struct ldap_reply {
+    ldap_reply *next, *prev;
+    ldap_request *request;
+    LDAPMessage_t message;
+};
+ldap_reply *ldap_reply_new(ldap_request *request);
+void ldap_reply_free(ldap_reply *reply);
+ldap_status_t ldap_reply_respond(ldap_reply *reply);
+#define ENTRY ldap_reply
+#include "dlist.h"
+
+#endif                          /* LIGHTLDAPD_LDAP_SERVER_H */

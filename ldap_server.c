@@ -6,6 +6,7 @@
  */
 
 #include "ldap_server.h"
+#include "nss2ldap.h"
 #include <unistd.h>
 
 #define LISTENQ 128
@@ -276,7 +277,8 @@ ldap_request *ldap_request_new(ldap_connection *connection, LDAPMessage_t *msg)
 
     request->connection = connection;
     request->message = msg;
-    ldap_response_init(&request->response);
+    request->reply = NULL;
+    request->count = 0;
     /* Add the request to the connection's circular dlist. */
     ldap_request_add(&connection->request, request);
     return request;
@@ -290,35 +292,29 @@ void ldap_request_free(ldap_request *request)
         ldap_connection *connection = request->connection;
         ldap_request_rem(&connection->request, request);
         LDAPMessage_free(request->message);
-        ldap_response_done(&request->response);
+        while (request->reply)
+            ldap_reply_free(request->reply);
         free(request);
     }
 }
 
-/* Allocate and initialize a bind ldap_request from a bind request message. */
+/* Allocate and initialize a bind ldap_request from a bind message. */
 ldap_request *ldap_request_bind(ldap_connection *connection, LDAPMessage_t *msg)
 {
     assert(msg->protocolOp.present == LDAPMessage__protocolOp_PR_bindRequest);
-    ldap_server *server = connection->server;
     ldap_request *request = ldap_request_new(connection, msg);
-    ldap_response *response = &request->response;
 
-    ldap_response_bind(response, server->basedn, server->anonok, msg->messageID, &msg->protocolOp.choice.bindRequest,
-                       &connection->binduid, &connection->delay);
+    ldap_request_bind_pam(request);
     return request;
 }
 
-/* Allocate and initialize a search ldap_request from a search request message.
- */
+/* Allocate and initialize a search ldap_request from a search message. */
 ldap_request *ldap_request_search(ldap_connection *connection, LDAPMessage_t *msg)
 {
     assert(msg->protocolOp.present == LDAPMessage__protocolOp_PR_searchRequest);
-    ldap_server *server = connection->server;
     ldap_request *request = ldap_request_new(connection, msg);
-    ldap_response *response = &request->response;
-    bool isroot = server->rootuid == connection->binduid;
 
-    ldap_response_search(response, server->basedn, isroot, msg->messageID, &msg->protocolOp.choice.searchRequest);
+    ldap_request_search_nss(request);
     return request;
 }
 
@@ -342,17 +338,50 @@ void ldap_request_abandon(ldap_connection *connection, LDAPMessage_t *msg)
 ldap_status_t ldap_request_respond(ldap_request *request)
 {
     assert(request);
-    ldap_connection *connection = request->connection;
-    ldap_response *response = &request->response;
-    LDAPMessage_t *msg = ldap_response_get(response);
-    ldap_status_t status = RC_OK;
+    assert(request->reply);
+    ldap_status_t status = ldap_reply_respond(request->reply);
 
-    if (msg && (status = ldap_connection_send(connection, msg)) == RC_OK) {
-        /* Increment response to next reply and connection to next request. */
-        ldap_response_inc(response);
-        connection->request = connection->request->next;
-    } else if (!msg || status == RC_FAIL)
-        /* Close and remove the request. */
+    /* If we sent a reply, rotate the connection to the next request. */
+    if (status == RC_OK)
+        request->connection->request = request->next;
+    /* If we have no more replies, we are done. */
+    if (!request->reply)
         ldap_request_free(request);
+    return status;
+}
+
+/* Allocate and initialize a bare ldap_reply for an ldap_request. */
+ldap_reply *ldap_reply_new(ldap_request *request)
+{
+    assert(request);
+    ldap_reply *reply = XNEW0(ldap_reply, 1);
+
+    reply->request = request;
+    reply->message.messageID = request->message->messageID;
+    /* Add the reply to the request's circular dlist. */
+    ldap_reply_add(&request->reply, reply);
+    request->count++;
+    return reply;
+}
+
+/* Destroy and free an ldap_response. */
+void ldap_reply_free(ldap_reply *reply)
+{
+    if (reply) {
+        /* Remove the reply from the request's circular dlist. */
+        ldap_reply_rem(&reply->request->reply, reply);
+        LDAPMessage_done(&reply->message);
+        free(reply);
+    }
+}
+
+ldap_status_t ldap_reply_respond(ldap_reply *reply)
+{
+    assert(reply);
+    ldap_status_t status = ldap_connection_send(reply->request->connection, &reply->message);
+
+    /* If the message was sent, we are done. */
+    if (status == RC_OK)
+        ldap_reply_free(reply);
     return status;
 }

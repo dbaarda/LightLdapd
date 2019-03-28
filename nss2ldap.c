@@ -39,123 +39,76 @@ static bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal
 static bool Filter_matches(const Filter_t *filter, const SearchResultEntry_t *res);
 static bool Filter_ok(const Filter_t *filter);
 
-/* Initialize an ldap_reponse. */
-void ldap_response_init(ldap_response *res)
+/* Get the ldap_replies for a BindRequest ldap_request using pam. */
+void ldap_request_bind_pam(ldap_request *request)
 {
-    assert(res);
+    assert(request);
+    assert(request->message->protocolOp.present == LDAPMessage__protocolOp_PR_bindRequest);
+    ldap_connection *connection = request->connection;
+    ldap_server *server = connection->server;
+    LDAPMessage_t *msg = &ldap_reply_new(request)->message;
+    const BindRequest_t *req = &request->message->protocolOp.choice.bindRequest;
+    BindResponse_t *resp = &msg->protocolOp.choice.bindResponse;
 
-    res->count = 0;
-    res->reply = NULL;
-}
-
-/* Destroy an ldap_response. */
-void ldap_response_done(ldap_response *res)
-{
-    assert(res);
-
-    while (res->reply)
-        ldap_response_inc(res);
-}
-
-/* Add an LDAPMessage to an ldap_response. */
-LDAPMessage_t *ldap_response_add(ldap_response *res, int msgid)
-{
-    assert(res);
-    ldap_reply *reply = XNEW0(ldap_reply, 1);
-
-    reply->msg.messageID = msgid;
-    res->count++;
-    ldap_reply_add(&res->reply, reply);
-    return &reply->msg;
-}
-
-/* Get the next LDAPMessage_t to send. */
-LDAPMessage_t *ldap_response_get(ldap_response *res)
-{
-    assert(res);
-
-    return res->reply ? &res->reply->msg : NULL;
-}
-
-/* Increment the next LDAPMessage_t to send. */
-void ldap_response_inc(ldap_response *res)
-{
-    assert(res);
-    ldap_reply *reply = res->reply;
-    assert(reply);
-
-    ldap_reply_rem(&res->reply, reply);
-    LDAPMessage_done(&reply->msg);
-    free(reply);
-}
-
-/* Get the ldap_response for a BindRequest message. */
-void ldap_response_bind(ldap_response *res, const char *basedn, const bool anonok, const int msgid,
-                        const BindRequest_t *req, uid_t *binduid, double *delay)
-{
-    assert(res);
-    assert(basedn);
-    assert(req);
-    assert(binduid);
-    assert(delay);
-    LDAPMessage_t *msg = ldap_response_add(res, msgid);
     msg->protocolOp.present = LDAPMessage__protocolOp_PR_bindResponse;
-    BindResponse_t *reply = &msg->protocolOp.choice.bindResponse;
-
-    LDAPString_set(&reply->matchedDN, (const char *)req->name.buf);
-    if (anonok && req->name.size == 0) {
+    LDAPString_set(&resp->matchedDN, (const char *)req->name.buf);
+    if (server->anonok && req->name.size == 0) {
         /* allow anonymous */
-        reply->resultCode = BindResponse__resultCode_success;
-        *binduid = -1;
+        resp->resultCode = BindResponse__resultCode_success;
+        connection->binduid = -1;
     } else if (req->authentication.present == AuthenticationChoice_PR_simple) {
         /* simple auth */
         char user[PWNAME_MAX];
         char *pw = (char *)req->authentication.choice.simple.buf;
         char status[PAMMSG_LEN] = "";
-        if (!dn2name(basedn, (const char *)req->name.buf, user)) {
-            reply->resultCode = BindResponse__resultCode_invalidDNSyntax;
-        } else if (PAM_SUCCESS != auth_pam(user, pw, status, delay)) {
-            reply->resultCode = BindResponse__resultCode_invalidCredentials;
-            LDAPString_set(&reply->diagnosticMessage, status);
+        if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
+            resp->resultCode = BindResponse__resultCode_invalidDNSyntax;
+        } else if (PAM_SUCCESS != auth_pam(user, pw, status, &connection->delay)) {
+            resp->resultCode = BindResponse__resultCode_invalidCredentials;
+            LDAPString_set(&resp->diagnosticMessage, status);
         } else {                /* Success! */
-            reply->resultCode = BindResponse__resultCode_success;
-            *binduid = name2uid(user);
+            resp->resultCode = BindResponse__resultCode_success;
+            connection->binduid = name2uid(user);
         }
     } else {
         /* sasl or anonymous auth */
-        reply->resultCode = BindResponse__resultCode_authMethodNotSupported;
+        resp->resultCode = BindResponse__resultCode_authMethodNotSupported;
     }
 }
 
-/* Get the ldap_response for a SearchRequest message. */
-void ldap_response_search(ldap_response *res, const char *basedn, const bool isroot, const int msgid,
-                          const SearchRequest_t *req)
+/* Get the ldap_replies for a SearchRequest ldap_request using nss. */
+void ldap_request_search_nss(ldap_request *request)
 {
-    assert(res);
-    assert(basedn);
-    assert(req);
+    assert(request);
+    assert(request->message->protocolOp.present == LDAPMessage__protocolOp_PR_searchRequest);
+    ldap_connection *connection = request->connection;
+    ldap_server *server = connection->server;
+    const SearchRequest_t *req = &request->message->protocolOp.choice.searchRequest;
     const bool bad_filter = !Filter_ok(&req->filter);
     const char *reqbasedn = (const char *)req->baseObject.buf;
     char passwdbasedn[STRING_MAX] = "ou=people,";
     char groupbasedn[STRING_MAX] = "ou=groups,";
     int limit = req->sizeLimit;
+    const char *basedn = server->basedn;
+    bool isroot = server->rootuid == connection->binduid;
+    int msgid = request->message->messageID;
 
     /* Get the basedn's for passwd and group data. */
     strcat(passwdbasedn, basedn);
     strcat(groupbasedn, basedn);
     /* Adjust limit to RESPONSE_MAX if it is zero or too large. */
     limit = (limit && (limit < RESPONSE_MAX)) ? limit : RESPONSE_MAX;
-    LDAPMessage_t *msg = ldap_response_add(res, msgid);
+    LDAPMessage_t *msg = &ldap_reply_new(request)->message;
     /* Add all the matching entries. */
     if (!bad_filter && strends(passwdbasedn, reqbasedn)) {
         passwd_t *pw;
-        while ((pw = getpwent()) && (res->count <= limit)) {
+        while ((pw = getpwent()) && (request->count <= limit)) {
             msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
             SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
             SearchResultEntry_passwd(entry, basedn, isroot, pw);
             if (Filter_matches(&req->filter, entry)) {
                 /* The entry matches, keep it and add another. */
-                msg = ldap_response_add(res, msgid);
+                msg = &ldap_reply_new(request)->message;
             } else {
                 /* Empty and wipe the entry message for the next one. */
                 LDAPMessage_done(msg);
@@ -167,13 +120,13 @@ void ldap_response_search(ldap_response *res, const char *basedn, const bool isr
     }
     if (!bad_filter && strends(groupbasedn, reqbasedn)) {
         group_t *gr;
-        while ((gr = getgrent()) && (res->count <= limit)) {
+        while ((gr = getgrent()) && (request->count <= limit)) {
             msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
             SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
             SearchResultEntry_group(entry, basedn, gr);
             if (Filter_matches(&req->filter, entry)) {
                 /* The entry matches, keep it and add another. */
-                msg = ldap_response_add(res, msgid);
+                msg = &ldap_reply_new(request)->message;
             } else {
                 /* Empty and wipe the entry message for the next one. */
                 LDAPMessage_done(msg);
