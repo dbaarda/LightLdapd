@@ -18,6 +18,9 @@
 /** Destroy an LDAPMessage freeing its contents only. */
 #define LDAPMessage_done(msg) ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_LDAPMessage, msg)
 
+/** Initialize an LDAPMessage and set its msgid. */
+#define LDAPMessage_init(msg, msgid) do { memset(msg, 0, sizeof(*msg)); msg->messageID = msgid; } while(0);
+
 #ifdef DEBUG
 #define LDAP_DEBUG(msg) asn_fprint(stdout, &asn_DEF_LDAPMessage, msg)
 #else
@@ -33,30 +36,5 @@ void ldap_request_bind_pam(ldap_request *request);
  *
  * \param request - the ldap_request to add the replies to. */
 void ldap_request_search_nss(ldap_request *request);
-
-/** Return a full "uid=<name>,ou=people,..." ldap dn from a name and basedn.
- *
- * \param basedn - the ldap base dn string.
- *
- * \param name - the user name string.
- *
- * \param dn - a char[STRING_MAX] buffer to hold the result.
- *
- * \return a pointer to the ldap dn string result. */
-char *name2dn(const char *basedn, const char *name, char *dn);
-
-/** Return the name from a full "uid=<name>,ou=people,..." ldap dn.
- *
- * This checks that the dn provided is in the valid form with the right basedn
- * and returns NULL if it is invalid.
- *
- * \param basedn - the ldap basedn string expected.
- *
- * \param dn - the full ldap dn string.
- *
- * \param name - a char[PWNAME_MAX] buffer to hold the result.
- *
- * \return a pointer to the name result or NULL if dn was invalid. */
-char *dn2name(const char *basedn, const char *dn, char *name);
 
 #endif                          /* LIGHTLDAPD_NSS2LDAP_H */

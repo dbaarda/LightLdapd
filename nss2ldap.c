@@ -15,10 +15,15 @@ typedef struct passwd passwd_t;
 typedef struct group group_t;
 typedef struct spwd spwd_t;
 
+/* Functions for dn's and cn's. */
+static char *gecos2cn(const char *gecos, char *cn);
+static char *name2dn(const char *basedn, const char *name, char *dn);
+static char *group2dn(const char *basedn, const char *group, char *dn);
+static char *dn2name(const char *basedn, const char *dn, char *name);
+
 /* LDAPString methods. */
 #define LDAPString_new(s) OCTET_STRING_new_fromBuf(&asn_DEF_LDAPString, (s), -1)
 #define LDAPString_set(str, s) OCTET_STRING_fromString((str), (s));
-
 /* PartialAttribute methods. */
 static PartialAttribute_t *PartialAttribute_new(const char *type);
 static LDAPString_t *PartialAttribute_add(PartialAttribute_t *attr, const char *value);
@@ -112,8 +117,7 @@ void ldap_request_search_nss(ldap_request *request)
             } else {
                 /* Empty and wipe the entry message for the next one. */
                 LDAPMessage_done(msg);
-                memset(msg, 0, sizeof(*msg));
-                msg->messageID = msgid;
+                LDAPMessage_init(msg, msgid);
             }
         }
         endpwent();
@@ -130,8 +134,7 @@ void ldap_request_search_nss(ldap_request *request)
             } else {
                 /* Empty and wipe the entry message for the next one. */
                 LDAPMessage_done(msg);
-                memset(msg, 0, sizeof(*msg));
-                msg->messageID = msgid;
+                LDAPMessage_init(msg, msgid);
             }
         }
         endgrent();
@@ -149,7 +152,7 @@ void ldap_request_search_nss(ldap_request *request)
 }
 
 /* Get the cn from the first field of a gecos entry. */
-char *gecos2cn(const char *gecos, char *cn)
+static char *gecos2cn(const char *gecos, char *cn)
 {
     assert(gecos);
     assert(cn);
@@ -161,7 +164,7 @@ char *gecos2cn(const char *gecos, char *cn)
 }
 
 /* Return a full "uid=<name>,ou=people,..." ldap dn from a name and basedn. */
-char *name2dn(const char *basedn, const char *name, char *dn)
+static char *name2dn(const char *basedn, const char *name, char *dn)
 {
     assert(basedn);
     assert(name);
@@ -171,7 +174,7 @@ char *name2dn(const char *basedn, const char *name, char *dn)
 }
 
 /* Return a full "uid=<name>,ou=groups,..." ldap dn from a name and basedn. */
-char *group2dn(const char *basedn, const char *group, char *dn)
+static char *group2dn(const char *basedn, const char *group, char *dn)
 {
     assert(basedn);
     assert(group);
@@ -181,7 +184,7 @@ char *group2dn(const char *basedn, const char *group, char *dn)
 }
 
 /* Return the name from a full "uid=<name>,ou=people,..." ldap dn. */
-char *dn2name(const char *basedn, const char *dn, char *name)
+static char *dn2name(const char *basedn, const char *dn, char *name)
 {
     assert(basedn);
     assert(dn);
