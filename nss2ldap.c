@@ -24,6 +24,7 @@ static char *dn2name(const char *basedn, const char *dn, char *name);
 /* LDAPString methods. */
 #define LDAPString_new(s) OCTET_STRING_new_fromBuf(&asn_DEF_LDAPString, (s), -1)
 #define LDAPString_set(str, s) OCTET_STRING_fromString((str), (s));
+
 /* PartialAttribute methods. */
 static PartialAttribute_t *PartialAttribute_new(const char *type);
 static LDAPString_t *PartialAttribute_add(PartialAttribute_t *attr, const char *value);
