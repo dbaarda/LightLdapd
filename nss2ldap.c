@@ -29,14 +29,23 @@ static char *dn2name(const char *basedn, const char *dn, char *name);
 static PartialAttribute_t *PartialAttribute_new(const char *type);
 static LDAPString_t *PartialAttribute_add(PartialAttribute_t *attr, const char *value);
 static LDAPString_t *PartialAttribute_addf(PartialAttribute_t *attr, char *format, ...);
+static void PartialAttribute_clear(PartialAttribute_t *attr);
 
 /* SearchResultEntry methods. */
+#define SearchResultEntry_done(res) ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_SearchResultEntry, res)
+#define SearchResultEntry_init(res) memset(res, 0, sizeof(*res))
 static PartialAttribute_t *SearchResultEntry_add(SearchResultEntry_t *res, const char *type);
 static const PartialAttribute_t *SearchResultEntry_get(const SearchResultEntry_t *res, const char *type);
 static void SearchResultEntry_passwd(SearchResultEntry_t *res, const char *basedn, const bool isroot, passwd_t *pw);
 static void SearchResultEntry_group(SearchResultEntry_t *res, const char *basedn, group_t *gr);
 static int SearchResultEntry_getpwnam(SearchResultEntry_t *res, const char *basedn, const bool isroot,
                                       const char *name);
+
+/* SearchRequest methods. */
+static bool SearchRequest_select(const SearchRequest_t *req, SearchResultEntry_t *res);
+
+/* AttributeSelection methods. */
+static bool AttributeSelection_contains(const AttributeSelection_t *sel, const char *type);
 
 /* AttributeValueAssertion methods */
 static bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal, const SearchResultEntry_t *res);
@@ -97,7 +106,6 @@ void ldap_request_search_nss(ldap_request *request)
     int limit = req->sizeLimit;
     const char *basedn = server->basedn;
     bool isroot = server->rootuid == connection->binduid;
-    int msgid = request->message->messageID;
 
     /* Get the basedn's for passwd and group data. */
     strcat(passwdbasedn, basedn);
@@ -112,14 +120,9 @@ void ldap_request_search_nss(ldap_request *request)
             msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
             SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
             SearchResultEntry_passwd(entry, basedn, isroot, pw);
-            if (Filter_matches(&req->filter, entry)) {
-                /* The entry matches, keep it and add another. */
+            /* If the entry matches, keep it and add another. */
+            if (SearchRequest_select(req, entry))
                 msg = &ldap_reply_new(request)->message;
-            } else {
-                /* Empty and wipe the entry message for the next one. */
-                LDAPMessage_done(msg);
-                LDAPMessage_init(msg, msgid);
-            }
         }
         endpwent();
     }
@@ -129,14 +132,9 @@ void ldap_request_search_nss(ldap_request *request)
             msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
             SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
             SearchResultEntry_group(entry, basedn, gr);
-            if (Filter_matches(&req->filter, entry)) {
-                /* The entry matches, keep it and add another. */
+            /* If the entry matches, keep it and add another. */
+            if (SearchRequest_select(req, entry))
                 msg = &ldap_reply_new(request)->message;
-            } else {
-                /* Empty and wipe the entry message for the next one. */
-                LDAPMessage_done(msg);
-                LDAPMessage_init(msg, msgid);
-            }
         }
         endgrent();
     }
@@ -218,7 +216,6 @@ static LDAPString_t *PartialAttribute_add(PartialAttribute_t *attr, const char *
     assert(attr);
     assert(value);
     LDAPString_t *s = LDAPString_new(value);
-    assert(s);
 
     asn_set_add(&attr->vals, s);
     return s;
@@ -237,13 +234,20 @@ static LDAPString_t *PartialAttribute_addf(PartialAttribute_t *attr, char *forma
     return PartialAttribute_add(attr, v);
 }
 
+/* Remove all the values from a PartialAttribute. */
+static void PartialAttribute_clear(PartialAttribute_t *attr)
+{
+    assert(attr);
+
+    asn_set_empty(&attr->vals);
+}
+
 /* Add a PartialAttribute to a SearchResultEntry. */
 static PartialAttribute_t *SearchResultEntry_add(SearchResultEntry_t *res, const char *type)
 {
     assert(res);
     assert(type);
     PartialAttribute_t *a = PartialAttribute_new(type);
-    assert(a);
 
     asn_sequence_add(&res->attributes, a);
     return a;
@@ -354,6 +358,45 @@ static int SearchResultEntry_getpwnam(SearchResultEntry_t *res, const char *base
         return -1;
     SearchResultEntry_passwd(res, basedn, isroot, pw);
     return 0;
+}
+
+/* Check a SearchRequest matches an entry and prune it to match selections. */
+static bool SearchRequest_select(const SearchRequest_t *req, SearchResultEntry_t *res)
+{
+    assert(req);
+    assert(res);
+
+    if (!Filter_matches(&req->filter, res)) {
+        /* Empty and wipe the whole entry. */
+        SearchResultEntry_done(res);
+        SearchResultEntry_init(res);
+        return false;
+    }
+    /* Prune unselected attributes and values. */
+    int i = 0;
+    while (i < res->attributes.list.count) {
+        PartialAttribute_t *attr = res->attributes.list.array[i];
+        if (req->typesOnly)
+            PartialAttribute_clear(attr);
+        if (!AttributeSelection_contains(&req->attributes, (const char *)attr->type.buf))
+            asn_sequence_del(&res->attributes.list, i, 1);
+        else
+            i++;
+    }
+    return true;
+}
+
+/* Check if an AttributeSelection contains an attribute type. */
+static bool AttributeSelection_contains(const AttributeSelection_t *sel, const char *type)
+{
+    assert(sel);
+    assert(type);
+
+    for (int i = 0; i < sel->list.count; i++)
+        if (!strcmp((const char *)sel->list.array[i]->buf, type))
+            return true;
+    /* An empty AttributeSelection means select all attributes. */
+    return !sel->list.count;
 }
 
 /* Check if an AttributeValueAssertion is equal to a SearchResultEntry */
