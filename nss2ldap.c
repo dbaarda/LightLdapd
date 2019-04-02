@@ -62,6 +62,7 @@ static void SearchResultEntry_group(SearchResultEntry_t *res, const char *basedn
 
 /* SearchRequest methods. */
 static bool SearchRequest_select(const SearchRequest_t *req, SearchResultEntry_t *res);
+static scope_t *SearchRequest_scope(const SearchRequest_t *req, const char *basedn, scope_t *scope);
 
 /* AttributeSelection methods. */
 static bool AttributeSelection_contains(const AttributeSelection_t *sel, const char *type);
@@ -125,47 +126,35 @@ void ldap_request_search_nss(ldap_request *request)
     ldap_server *server = connection->server;
     const SearchRequest_t *req = &request->message->protocolOp.choice.searchRequest;
     const bool bad_filter = !Filter_ok(&req->filter);
-    const char *reqbasedn = (const char *)req->baseObject.buf;
-    char passwdbasedn[STRING_MAX] = "ou=people,";
-    char groupbasedn[STRING_MAX] = "ou=groups,";
     int limit = req->sizeLimit;
     const char *basedn = server->basedn;
     bool isroot = server->rootuid == connection->binduid;
 
-    /* Get the basedn's for passwd and group data. */
-    strcat(passwdbasedn, basedn);
-    strcat(groupbasedn, basedn);
     /* Adjust limit to RESPONSE_MAX if it is zero or too large. */
     limit = (limit && (limit < RESPONSE_MAX)) ? limit : RESPONSE_MAX;
     LDAPMessage_t *msg = &ldap_reply_new(request)->message;
     /* Add all the matching entries. */
     if (!bad_filter) {
         scope_t scope;
-        Filter_scope(&req->filter, &scope);
-        if (strends(passwdbasedn, reqbasedn)) {
-            for (passwd_t *pw = scope_passwd_iter(&scope); pw && (request->count <= limit);
-                 pw = scope_passwd_next(&scope)) {
-                msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
-                SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
-                SearchResultEntry_passwd(entry, basedn, isroot, pw);
-                /* If the entry matches, keep it and add another. */
-                if (SearchRequest_select(req, entry))
-                    msg = &ldap_reply_new(request)->message;
-            }
-            scope_passwd_done(&scope);
+        SearchRequest_scope(req, basedn, &scope);
+        for (passwd_t *pw = scope_passwd_iter(&scope); pw && (request->count <= limit); pw = scope_passwd_next(&scope)) {
+            msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
+            SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
+            SearchResultEntry_passwd(entry, basedn, isroot, pw);
+            /* If the entry matches, keep it and add another. */
+            if (SearchRequest_select(req, entry))
+                msg = &ldap_reply_new(request)->message;
         }
-        if (strends(groupbasedn, reqbasedn)) {
-            for (group_t *gr = scope_group_iter(&scope); gr && (request->count <= limit);
-                 gr = scope_group_next(&scope)) {
-                msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
-                SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
-                SearchResultEntry_group(entry, basedn, gr);
-                /* If the entry matches, keep it and add another. */
-                if (SearchRequest_select(req, entry))
-                    msg = &ldap_reply_new(request)->message;
-            }
-            scope_group_done(&scope);
+        scope_passwd_done(&scope);
+        for (group_t *gr = scope_group_iter(&scope); gr && (request->count <= limit); gr = scope_group_next(&scope)) {
+            msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
+            SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
+            SearchResultEntry_group(entry, basedn, gr);
+            /* If the entry matches, keep it and add another. */
+            if (SearchRequest_select(req, entry))
+                msg = &ldap_reply_new(request)->message;
         }
+        scope_group_done(&scope);
     }
     /* Otherwise construct a SearchResultDone. */
     msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResDone;
@@ -526,6 +515,29 @@ static bool SearchRequest_select(const SearchRequest_t *req, SearchResultEntry_t
             i++;
     }
     return true;
+}
+
+/* Get the scope for a SearchRequest. */
+static scope_t *SearchRequest_scope(const SearchRequest_t *req, const char *basedn, scope_t *scope)
+{
+    assert(req);
+    assert(basedn);
+    assert(scope);
+    const char *reqbasedn = (const char *)req->baseObject.buf;
+    char passwdbasedn[STRING_MAX] = "ou=people,";
+    char groupbasedn[STRING_MAX] = "ou=groups,";
+    scope_t dnscope;
+
+    /* Get the basedn's for passwd and group data. */
+    strcat(passwdbasedn, basedn);
+    strcat(groupbasedn, basedn);
+    /* Set dnscope to exclude passwd or group depending on reqbasedn. */
+    scope_init(&dnscope);
+    if (!strends(passwdbasedn, reqbasedn))
+        dnscope.mask &= ~SCOPE_PASSWD;
+    if (!strends(groupbasedn, reqbasedn))
+        dnscope.mask &= ~SCOPE_GROUP;
+    return scope_and(Filter_scope(&req->filter, scope), &dnscope);
 }
 
 /* Check if an AttributeSelection contains an attribute type. */
