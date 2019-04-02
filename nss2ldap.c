@@ -588,6 +588,8 @@ static scope_t *AttributeValueAssertion_equal_scope(const AttributeValueAssertio
             scope->mask = SCOPE_PASSWD;
         else if (!strcmp(value, "posixGroup"))
             scope->mask = SCOPE_GROUP;
+        else
+            scope->mask = 0;
     } else if (!strcmp(name, "uid")) {
         scope->uid = value;
     } else if (!strcmp(name, "uidNumber")) {
