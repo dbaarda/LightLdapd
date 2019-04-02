@@ -69,7 +69,6 @@ static bool AttributeSelection_contains(const AttributeSelection_t *sel, const c
 
 /* AttributeDescription methods. */
 static bool AttributeDescription_present(const AttributeDescription_t *present, const SearchResultEntry_t *res);
-static scope_t *AttributeDescription_present_scope(const AttributeDescription_t *present, scope_t *scope);
 
 /* AttributeValueAssertion methods */
 static bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal, const SearchResultEntry_t *res);
@@ -559,17 +558,6 @@ static bool AttributeDescription_present(const AttributeDescription_t *present, 
     return SearchResultEntry_get(res, (const char *)present->buf) != NULL;
 }
 
-/* Get the search scope for an AttributeDescription_present check. */
-static scope_t *AttributeDescription_present_scope(const AttributeDescription_t *present, scope_t *scope)
-{
-    const char *attr = (const char *)present->buf;
-
-    scope_init(scope);
-    if (!strcmp(attr, "uid") || !strcmp(attr, "uidNumber"))
-        scope->mask = SCOPE_PASSWD;
-    return scope;
-}
-
 /* Check if an AttributeValueAssertion is equal to a SearchResultEntry */
 static bool AttributeValueAssertion_equal(const AttributeValueAssertion_t *equal, const SearchResultEntry_t *res)
 {
@@ -601,10 +589,8 @@ static scope_t *AttributeValueAssertion_equal_scope(const AttributeValueAssertio
         else if (!strcmp(value, "posixGroup"))
             scope->mask = SCOPE_GROUP;
     } else if (!strcmp(name, "uid")) {
-        scope->mask = SCOPE_PASSWD;
         scope->uid = value;
     } else if (!strcmp(name, "uidNumber")) {
-        scope->mask = SCOPE_PASSWD;
         scope->uidNumber = value;
     } else if (!strcmp(name, "cn")) {
         scope->cn = value;
@@ -683,7 +669,6 @@ static scope_t *Filter_scope(const Filter_t *filter, scope_t *scope)
 {
     assert(filter);
     assert(scope);
-    assert(Filter_ok(filter));
     scope_t other;
 
     switch (filter->present) {
@@ -702,13 +687,13 @@ static scope_t *Filter_scope(const Filter_t *filter, scope_t *scope)
     case Filter_PR_equalityMatch:
         return AttributeValueAssertion_equal_scope(&filter->choice.equalityMatch, scope);
     case Filter_PR_present:
-        return AttributeDescription_present_scope(&filter->choice.present, scope);
     case Filter_PR_substrings:
     case Filter_PR_greaterOrEqual:
     case Filter_PR_lessOrEqual:
     case Filter_PR_approxMatch:
     case Filter_PR_extensibleMatch:
     default:
+        scope_init(scope);
         return scope;
     }
 }
