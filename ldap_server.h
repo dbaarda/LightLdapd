@@ -11,6 +11,7 @@
 #include "asn1/LDAPMessage.h"
 #define EV_COMPAT3 0            /* Use the ev 4.X API. */
 #include <ev.h>
+#include <mbedtls/net_sockets.h>
 
 #define BUFFER_SIZE 16384
 typedef struct {
@@ -38,9 +39,10 @@ typedef struct {
     bool anonok;                /**< If anonymous bind is allowed. */
     ev_loop *loop;              /**< The libev loop to use. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
+    const mbedtls_net_context *socket;  /**< The socket used. */
 } ldap_server;
 void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonok);
-int ldap_server_start(ldap_server *server, uint32_t addr, int port);
+void ldap_server_start(ldap_server *server, const mbedtls_net_context *socket);
 void ldap_server_stop(ldap_server *server);
 
 /* Reuse the ber_decode return value enum as the ldap recv/send status. */

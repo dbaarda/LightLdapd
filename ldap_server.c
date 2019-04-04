@@ -47,31 +47,17 @@ void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t ro
     server->loop = loop;
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
+    server->socket = NULL;
 }
 
-int ldap_server_start(ldap_server *server, uint32_t addr, int port)
+void ldap_server_start(ldap_server *server, const mbedtls_net_context *socket)
 {
-    int serv_sd;
-    int opt = 1;
-    struct sockaddr_in servaddr;
-
     assert(!ev_is_active(&server->connection_watcher));
+    assert(!server->socket);
 
-    if ((serv_sd = socket(PF_INET, SOCK_STREAM, 0)) < 0)
-        fail1("socket", -1);
-    if (setsockopt(serv_sd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-        fail1("setsockopt", -1);
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(addr);
-    servaddr.sin_port = htons(port);
-    if (bind(serv_sd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
-        fail1("bind", -1);
-    if (listen(serv_sd, LISTENQ) < 0)
-        fail1("listen", -1);
-    ev_io_set(&server->connection_watcher, serv_sd, EV_READ);
+    ev_io_set(&server->connection_watcher, socket->fd, EV_READ);
     ev_io_start(server->loop, &server->connection_watcher);
-    return serv_sd;
+    server->socket = socket;
 }
 
 void ldap_server_stop(ldap_server *server)
@@ -79,7 +65,7 @@ void ldap_server_stop(ldap_server *server)
     assert(ev_is_active(&server->connection_watcher));
 
     ev_io_stop(server->loop, &server->connection_watcher);
-    close(server->connection_watcher.fd);
+    server->socket = NULL;
 }
 
 ldap_connection *ldap_connection_new(ldap_server *server, int fd)

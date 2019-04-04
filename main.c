@@ -10,7 +10,7 @@
 #include <unistd.h>
 
 char *setting_basedn = "dc=lightldapd";
-int setting_port = 389;
+char *setting_port = "389";
 int setting_daemon = 0;
 int setting_loopback = 0;
 uid_t setting_rootuid = 0;
@@ -21,19 +21,22 @@ void settings(int argc, char **argv);
 int main(int argc, char **argv)
 {
     ev_loop *loop = EV_DEFAULT;
+    mbedtls_net_context socket;
     ldap_server server;
-    uint32_t server_addr;
+    char *server_addr;
 
     settings(argc, argv);
-    server_addr = setting_loopback ? INADDR_LOOPBACK : INADDR_ANY;
+    server_addr = setting_loopback ? "127.0.0.1" : NULL;
     if (setting_daemon && daemon(0, 0))
         fail1("daemon", 1);
-    ldap_server_init(&server, loop, setting_basedn, setting_rootuid, setting_anonok);
-    if (ldap_server_start(&server, server_addr, setting_port) < 0)
-        fail1("ldap_server_start", 1);
+    if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
+        fail1("mbdedtls_net_bind", 1);
     if (setting_setuid && setuid(setting_setuid))
         fail1("setuid", 1);
+    ldap_server_init(&server, loop, setting_basedn, setting_rootuid, setting_anonok);
+    ldap_server_start(&server, &socket);
     ev_run(loop, 0);
+    mbedtls_net_free(&socket);
     return 0;
 }
 
@@ -56,7 +59,7 @@ void settings(int argc, char **argv)
             setting_loopback = 1;
             break;
         case 'p':
-            setting_port = atoi(optarg);
+            setting_port = optarg;
             break;
         case 'r':
             setting_rootuid = name2uid(optarg);

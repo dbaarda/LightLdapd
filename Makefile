@@ -2,7 +2,7 @@ TARGET=lightldapd
 CC=gcc
 AR=ar
 CFLAGS=-Wall -Wextra -fno-strict-aliasing
-LDFLAGS=-lev -lpam
+LDFLAGS=-lev -lpam -lmbedtls
 
 .PHONY: all debug clean install debian debclean tidy
 
@@ -39,7 +39,7 @@ debclean:
 
 tidy:
 	# Reformat all code and comments to preferred coding style."
-	tidyc -ppi0 -R -C -T '/ev_\w+/' -T '/ldap_\w+/' -T 'ENTRY' *.[ch]
+	tidyc -ppi0 -R -C -T '/ev_\w+/' -T '/mbedtls_\w+/' -T '/ldap_\w+/' -T 'ENTRY' *.[ch]
 
 check: CFLAGS += -DDEBUG
 check:
