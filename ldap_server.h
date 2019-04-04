@@ -39,7 +39,7 @@ typedef struct {
     bool anonok;                /**< If anonymous bind is allowed. */
     ev_loop *loop;              /**< The libev loop to use. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
-    const mbedtls_net_context *socket;  /**< The socket used. */
+    const mbedtls_net_context *socket;  /**< The mbedtls socket used. */
 } ldap_server;
 void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonok);
 void ldap_server_start(ldap_server *server, const mbedtls_net_context *socket);

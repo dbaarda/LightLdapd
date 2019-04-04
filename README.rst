@@ -40,9 +40,6 @@ shadow data.
 It does not yet support TLS encryption, so should not be used on
 untrusted networks unless put behind an ssl proxy.
 
-It has not been optimized at all, and is currently very inefficient.
-It does a full scan of all users and groups every search request.
-
 Contents
 ========
 
@@ -76,6 +73,7 @@ Dependencies
 * `asn1c <https://github.com/vlm/asn1c>`_
 * `libev <http://software.schmorp.de/pkg/libev.html>`_
 * `libpam <http://www.kernel.org/pub/linux/libs/pam/>`_
+* `mbedtls <https://tls.mbed.org/>`_
 
 
 Build
