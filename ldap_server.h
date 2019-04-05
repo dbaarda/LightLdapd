@@ -15,7 +15,7 @@
 
 #define BUFFER_SIZE 16384
 typedef struct {
-    char buf[BUFFER_SIZE];
+    unsigned char buf[BUFFER_SIZE];
     size_t len;
 } buffer_t;
 void buffer_init(buffer_t *buffer);
@@ -34,15 +34,15 @@ typedef struct ldap_reply ldap_reply;
 
 /** The ldap_server class. */
 typedef struct {
+    mbedtls_net_context socket; /**< The mbedtls server socket used. */
     char *basedn;               /**< The ldap basedn to use. */
     uid_t rootuid;              /**< The uid of admin "root" user. */
     bool anonok;                /**< If anonymous bind is allowed. */
     ev_loop *loop;              /**< The libev loop to use. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
-    const mbedtls_net_context *socket;  /**< The mbedtls socket used. */
 } ldap_server;
 void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonok);
-void ldap_server_start(ldap_server *server, const mbedtls_net_context *socket);
+void ldap_server_start(ldap_server *server, mbedtls_net_context socket);
 void ldap_server_stop(ldap_server *server);
 
 /* Reuse the ber_decode return value enum as the ldap recv/send status. */
@@ -51,6 +51,7 @@ typedef enum asn_dec_rval_code_e ldap_status_t;
 /** The ldap_connection class. */
 typedef struct {
     ldap_server *server;        /**< The server for this connection. */
+    mbedtls_net_context socket; /**< The mbedtls client socket used. */
     uid_t binduid;              /**< The uid the client binded to. */
     ev_io read_watcher;         /**< The libev data read watcher. */
     ev_io write_watcher;        /**< The libev data write watcher. */
@@ -61,7 +62,7 @@ typedef struct {
     buffer_t recv_buf;          /**< The buffer for incoming data. */
     buffer_t send_buf;          /**< The buffer for outgoing data. */
 } ldap_connection;
-ldap_connection *ldap_connection_new(ldap_server *server, int fd);
+ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket);
 void ldap_connection_free(ldap_connection *connection);
 void ldap_connection_respond(ldap_connection *connection);
 ldap_status_t ldap_connection_send(ldap_connection *connection, LDAPMessage_t *msg);

@@ -34,9 +34,8 @@ int main(int argc, char **argv)
     if (setting_setuid && setuid(setting_setuid))
         fail1("setuid", 1);
     ldap_server_init(&server, loop, setting_basedn, setting_rootuid, setting_anonok);
-    ldap_server_start(&server, &socket);
+    ldap_server_start(&server, socket);
     ev_run(loop, 0);
-    mbedtls_net_free(&socket);
     return 0;
 }
 

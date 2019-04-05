@@ -7,9 +7,6 @@
 
 #include "ldap_server.h"
 #include "nss2ldap.h"
-#include <unistd.h>
-
-#define LISTENQ 128
 
 void accept_cb(ev_loop *loop, ev_io *watcher, int revents);
 void read_cb(ev_loop *loop, ev_io *watcher, int revents);
@@ -41,23 +38,22 @@ void buffer_consumed(buffer_t *buffer, size_t len)
 
 void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonok)
 {
+    mbedtls_net_init(&server->socket);
     server->basedn = basedn;
     server->rootuid = rootuid;
     server->anonok = anonok;
     server->loop = loop;
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
-    server->socket = NULL;
 }
 
-void ldap_server_start(ldap_server *server, const mbedtls_net_context *socket)
+void ldap_server_start(ldap_server *server, mbedtls_net_context socket)
 {
     assert(!ev_is_active(&server->connection_watcher));
-    assert(!server->socket);
 
-    ev_io_set(&server->connection_watcher, socket->fd, EV_READ);
-    ev_io_start(server->loop, &server->connection_watcher);
     server->socket = socket;
+    ev_io_set(&server->connection_watcher, socket.fd, EV_READ);
+    ev_io_start(server->loop, &server->connection_watcher);
 }
 
 void ldap_server_stop(ldap_server *server)
@@ -65,18 +61,19 @@ void ldap_server_stop(ldap_server *server)
     assert(ev_is_active(&server->connection_watcher));
 
     ev_io_stop(server->loop, &server->connection_watcher);
-    server->socket = NULL;
+    mbedtls_net_free(&server->socket);
 }
 
-ldap_connection *ldap_connection_new(ldap_server *server, int fd)
+ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket)
 {
     ldap_connection *connection = XNEW0(ldap_connection, 1);
 
     connection->server = server;
+    connection->socket = socket;
     connection->binduid = -1;
-    ev_io_init(&connection->read_watcher, read_cb, fd, EV_READ);
+    ev_io_init(&connection->read_watcher, read_cb, socket.fd, EV_READ);
     connection->read_watcher.data = connection;
-    ev_io_init(&connection->write_watcher, write_cb, fd, EV_WRITE);
+    ev_io_init(&connection->write_watcher, write_cb, socket.fd, EV_WRITE);
     connection->write_watcher.data = connection;
     ev_init(&connection->delay_watcher, delay_cb);
     connection->delay_watcher.data = connection;
@@ -94,7 +91,7 @@ void ldap_connection_free(ldap_connection *connection)
     ev_io_stop(connection->server->loop, &connection->read_watcher);
     ev_io_stop(connection->server->loop, &connection->write_watcher);
     ev_timer_stop(connection->server->loop, &connection->delay_watcher);
-    close(connection->read_watcher.fd);
+    mbedtls_net_free(&connection->socket);
     LDAPMessage_free(connection->recv_msg);
     while (connection->request)
         ldap_request_free(connection->request);
@@ -189,16 +186,16 @@ ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **
 void accept_cb(ev_loop *loop, ev_io *watcher, int revents)
 {
     ldap_server *server = watcher->data;
-    int client_sd;
+    mbedtls_net_context socket;
 
     assert(server->loop == loop);
     assert(&server->connection_watcher == watcher);
 
     if (EV_ERROR & revents)
         fail("got invalid event");
-    if ((client_sd = accept(watcher->fd, NULL, NULL)) < 0)
-        fail("accept error");
-    ldap_connection_new(server, client_sd);
+    if (mbedtls_net_accept(&server->socket, &socket, NULL, 0, NULL))
+        fail("mbedtls_net_accept error");
+    ldap_connection_new(server, socket);
 }
 
 void read_cb(ev_loop *loop, ev_io *watcher, int revents)
@@ -212,11 +209,11 @@ void read_cb(ev_loop *loop, ev_io *watcher, int revents)
 
     if (EV_ERROR & revents)
         fail("got invalid event");
-    buf_cnt = recv(watcher->fd, buffer_wpos(buf), buffer_wlen(buf), 0);
+    buf_cnt = mbedtls_net_recv(&connection->socket, buffer_wpos(buf), buffer_wlen(buf));
     if (buf_cnt <= 0) {
         ldap_connection_free(connection);
         if (buf_cnt < 0)
-            fail("read");
+            fail("mbedtls_net_recv");
         return;
     }
     buffer_appended(buf, buf_cnt);
@@ -233,10 +230,10 @@ void write_cb(ev_loop *loop, ev_io *watcher, int revents)
     assert(connection->server->loop == loop);
     assert(&connection->write_watcher == watcher);
 
-    buf_cnt = send(watcher->fd, buffer_rpos(buf), buffer_rlen(buf), MSG_NOSIGNAL);
+    buf_cnt = mbedtls_net_send(&connection->socket, buffer_rpos(buf), buffer_rlen(buf));
     if (buf_cnt < 0) {
         ldap_connection_free(connection);
-        fail("send");
+        fail("mbedtls_net_send");
     }
     buffer_consumed(buf, buf_cnt);
     ldap_connection_respond(connection);
