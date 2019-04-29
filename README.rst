@@ -21,8 +21,8 @@ The code is small, clean and efficient C, leveraging of existing
 libraries as much as possible. It uses libev for an efficient event
 loop. It uses asn1c to auto-generate the LDAP message
 parsing/generating from the ASN.1 spec. It uses libpam for
-authentication. It is small and efficient enough to run on a router or
-NAS.
+authentication. It uses mbedtls for TLS support. It is small and
+efficient enough to run on a router or NAS.
 
 LightLdapd was forked from the excellent entente by Sergey Urbanovich
 with his blessing. The choice to fork was made in order to leave
@@ -35,10 +35,19 @@ Status
 
 LightLdapd is now functional enough to be used for clients using
 pam_ldap authentication and/or nss_ldap access to passwd, group, and
-shadow data.
+shadow data. It now has TLS support so it should be safe to use on
+untrusted networks.
 
-It does not yet support TLS encryption, so should not be used on
-untrusted networks unless put behind an ssl proxy.
+The TLS support is new and still a bit rough. In particular, it
+doesn't gracefully shutdown TLS sessions and doesn't enforce TLS is
+active before allowing bind operations. This means it is possible for
+clients to accidentally use it insecurely on an untrusted network.
+
+It does not yet have any logging, which can make it hard to figure out
+what is wrong when something is not working.
+
+See the github issue tracker for the most up to date status on what
+is/isn't working.
 
 Contents
 ========
@@ -113,6 +122,9 @@ Options
 -d  Run as a daemon.
 -r rootuser  Optional bind user for 'root' access to shadowAccount data.
 -u runuser  Optional user to run as after dropping root privileges.
+-C crtpath  Optional path to an ssl cert to use for TLS.
+-A ca-path  Optional path to a ca-chain to use for TLS.
+-K keypath  Optional path to a private key to use for TLS.
 
 Note lightldapd must run as root to open the default ldap serving
 port, but using ``-u runuser`` it will use setuid() to drop root
@@ -130,6 +142,17 @@ also configure nss_ldap on the client machines to bind as the rootuser
 with the ``rootbinddn`` setting so root (and only root)on the clients
 can read shadow data.
 
+To enable TLS support you specify a cert file with the ``-C`` option,
+and optionally a certificate authority chain file with the ``-A``
+argument and/or a separate private key file with the ``-K`` argument.
+If you don't use the ``-K`` option, the cert file must be a ``*.pem``
+file containing both the cert and private key. The file contining the
+private key must be readable by the user lightldapd is started as, but
+doesn't have to be readable by the ``-u runuser`` user. Typically it
+is set readable only by root. It is important to configure your
+clients to use TLS and trust the cert used. If you are using
+self-signed certs this typically means giving them a copy of the
+public cert.
 
 Example usage with lighttpd
 ---------------------------
