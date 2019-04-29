@@ -16,6 +16,9 @@ int setting_loopback = 0;
 uid_t setting_rootuid = 0;
 uid_t setting_setuid = 0;
 bool setting_anonok = 0;
+char *setting_crtpath = NULL;
+char *setting_caspath = NULL;
+char *setting_keypath = NULL;
 void settings(int argc, char **argv);
 
 int main(int argc, char **argv)
@@ -31,9 +34,12 @@ int main(int argc, char **argv)
         fail1("daemon", 1);
     if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
         fail1("mbdedtls_net_bind", 1);
+    if (ldap_server_init
+        (&server, loop, setting_basedn, setting_rootuid, setting_anonok, setting_crtpath, setting_caspath,
+         setting_keypath))
+        fail1("ldap_server_init", 1);
     if (setting_setuid && setuid(setting_setuid))
         fail1("setuid", 1);
-    ldap_server_init(&server, loop, setting_basedn, setting_rootuid, setting_anonok);
     ldap_server_start(&server, socket);
     ev_run(loop, 0);
     return 0;
@@ -43,7 +49,7 @@ void settings(int argc, char **argv)
 {
     int c;
 
-    while ((c = getopt(argc, argv, "ab:dlp:r:u:")) != -1) {
+    while ((c = getopt(argc, argv, "ab:dlp:r:u:C:A:K:")) != -1) {
         switch (c) {
         case 'a':
             setting_anonok = true;
@@ -66,8 +72,19 @@ void settings(int argc, char **argv)
         case 'u':
             setting_setuid = name2uid(optarg);
             break;
+        case 'C':
+            setting_crtpath = optarg;
+            break;
+        case 'A':
+            setting_caspath = optarg;
+            break;
+        case 'K':
+            setting_keypath = optarg;
+            break;
         default:
-            fprintf(stderr, "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r root] [-u user]\n", argv[0]);
+            fprintf(stderr,
+                    "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r root] [-u user] "
+                    "[-C crtfile] [-A ca-file] [-K keyfile]\n", argv[0]);
             exit(1);
         }
     }

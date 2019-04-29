@@ -8,10 +8,14 @@
 #include "ldap_server.h"
 #include "nss2ldap.h"
 
+static const char *LDAPOID_StartTLS = "1.3.6.1.4.1.1466.20037";
+
 void accept_cb(ev_loop *loop, ev_io *watcher, int revents);
 void read_cb(ev_loop *loop, ev_io *watcher, int revents);
 void write_cb(ev_loop *loop, ev_io *watcher, int revents);
 void delay_cb(EV_P_ ev_timer *w, int revents);
+void handshake_cb(ev_loop *loop, ev_io *watcher, int revents);
+void goodbye_cb(ev_loop *loop, ev_io *watcher, int revents);
 
 void buffer_init(buffer_t *buffer)
 {
@@ -36,7 +40,8 @@ void buffer_consumed(buffer_t *buffer, size_t len)
     }
 }
 
-void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonok)
+int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const uid_t rootuid, const bool anonok,
+                     const char *crtpath, const char *caspath, const char *keypath)
 {
     mbedtls_net_init(&server->socket);
     server->basedn = basedn;
@@ -45,6 +50,9 @@ void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t ro
     server->loop = loop;
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
+    if (crtpath)
+        return mbedtls_ssl_server_init(&server->ssl, crtpath, caspath, keypath);
+    return 0;
 }
 
 void ldap_server_start(ldap_server *server, mbedtls_net_context socket)
@@ -82,6 +90,7 @@ ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context so
     connection->delay = 0.0;
     buffer_init(&connection->recv_buf);
     buffer_init(&connection->send_buf);
+    connection->secure = false;
     ev_io_start(server->loop, &connection->read_watcher);
     return connection;
 }
@@ -95,6 +104,8 @@ void ldap_connection_free(ldap_connection *connection)
     LDAPMessage_free(connection->recv_msg);
     while (connection->request)
         ldap_request_free(connection->request);
+    if (connection->secure)
+        mbedtls_ssl_connection_done(&connection->ssl);
     free(connection);
 }
 
@@ -117,6 +128,9 @@ void ldap_connection_respond(ldap_connection *connection)
             break;
         case LDAPMessage__protocolOp_PR_abandonRequest:
             ldap_request_abandon(connection, *msg);
+            break;
+        case LDAPMessage__protocolOp_PR_extendedReq:
+            ldap_request_extended(connection, *msg);
             break;
         default:
             /* For unknown or unbindRequest, close the connection. */
@@ -209,11 +223,14 @@ void read_cb(ev_loop *loop, ev_io *watcher, int revents)
 
     if (EV_ERROR & revents)
         fail("got invalid event");
-    buf_cnt = mbedtls_net_recv(&connection->socket, buffer_wpos(buf), buffer_wlen(buf));
+    if (connection->secure)
+        buf_cnt = mbedtls_ssl_read(&connection->ssl, buffer_wpos(buf), buffer_wlen(buf));
+    else
+        buf_cnt = mbedtls_net_recv(&connection->socket, buffer_wpos(buf), buffer_wlen(buf));
     if (buf_cnt <= 0) {
         ldap_connection_free(connection);
         if (buf_cnt < 0)
-            fail("mbedtls_net_recv");
+            mbedtls_fail("mbedtls_net_recv", buf_cnt);
         return;
     }
     buffer_appended(buf, buf_cnt);
@@ -230,13 +247,53 @@ void write_cb(ev_loop *loop, ev_io *watcher, int revents)
     assert(connection->server->loop == loop);
     assert(&connection->write_watcher == watcher);
 
-    buf_cnt = mbedtls_net_send(&connection->socket, buffer_rpos(buf), buffer_rlen(buf));
+    if (connection->secure)
+        buf_cnt = mbedtls_ssl_write(&connection->ssl, buffer_rpos(buf), buffer_rlen(buf));
+    else
+        buf_cnt = mbedtls_net_send(&connection->socket, buffer_rpos(buf), buffer_rlen(buf));
     if (buf_cnt < 0) {
         ldap_connection_free(connection);
-        fail("mbedtls_net_send");
+        mbedtls_fail("mbedtls_net_send", buf_cnt);
     }
     buffer_consumed(buf, buf_cnt);
     ldap_connection_respond(connection);
+}
+
+void handshake_cb(ev_loop *loop, ev_io *watcher, int revents)
+{
+    ldap_connection *connection = watcher->data;
+    int ret;
+    assert(connection->server->loop == loop);
+
+    /* Send all outstanding requests and data using write_cb() first. */
+    if (connection->request || !buffer_empty(&connection->send_buf))
+        return write_cb(loop, watcher, revents);
+    switch (ret = mbedtls_ssl_handshake(&connection->ssl)) {
+    case 0:
+        /* Handshake complete, set read/write watcher callbacks back. */
+        ev_set_cb(&connection->read_watcher, read_cb);
+        ev_set_cb(&connection->write_watcher, write_cb);
+        connection->secure = true;
+        return;
+    case MBEDTLS_ERR_SSL_WANT_READ:
+        ev_io_stop(loop, &connection->write_watcher);
+        ev_io_start(loop, &connection->read_watcher);
+        return;
+    case MBEDTLS_ERR_SSL_WANT_WRITE:
+        ev_io_stop(loop, &connection->read_watcher);
+        ev_io_start(loop, &connection->write_watcher);
+        return;
+    default:
+        /* Something went wrong during the handshake, close the connection. */
+        ldap_connection_free(connection);
+        mbedtls_fail("mbedtls_ssl_handshake", ret);
+    }
+}
+
+void goodbye_cb(ev_loop *loop, ev_io *watcher, int revents)
+{
+    ldap_connection *connection = watcher->data;
+    assert(connection->server->loop == loop);
 }
 
 void delay_cb(ev_loop *loop, ev_timer *watcher, int revents)
@@ -298,6 +355,35 @@ ldap_request *ldap_request_search(ldap_connection *connection, LDAPMessage_t *ms
     ldap_request *request = ldap_request_new(connection, msg);
 
     ldap_request_search_nss(request);
+    return request;
+}
+
+/* Allocate and initialize an ldap_request from a extendedRequest message. */
+ldap_request *ldap_request_extended(ldap_connection *connection, LDAPMessage_t *msg)
+{
+    assert(connection);
+    assert(msg);
+    assert(msg->protocolOp.present == LDAPMessage__protocolOp_PR_extendedReq);
+    ldap_server *server = connection->server;
+    ldap_request *request = ldap_request_new(connection, msg);
+    ldap_reply *reply = ldap_reply_new(request);
+    const ExtendedRequest_t *req = &msg->protocolOp.choice.extendedReq;
+    ExtendedResponse_t *res = &reply->message.protocolOp.choice.extendedResp;
+
+    reply->message.protocolOp.present = LDAPMessage__protocolOp_PR_extendedResp;
+    LDAPString_set(&res->matchedDN, server->basedn);
+    if (!strcmp((char *)req->requestName.buf, LDAPOID_StartTLS)) {
+        res->resultCode = ExtendedResponse__resultCode_success;
+        LDAPString_set(&res->diagnosticMessage, "Starting TLS handshake...");
+        res->responseName = LDAPString_new(LDAPOID_StartTLS);
+        /* Init ssl context and change the watcher callbacks for handshake. */
+        mbedtls_ssl_connection_init(&connection->ssl, &server->ssl, &connection->socket);
+        ev_set_cb(&connection->read_watcher, handshake_cb);
+        ev_set_cb(&connection->write_watcher, handshake_cb);
+    } else {
+        res->resultCode = ExtendedResponse__resultCode_protocolError;
+        LDAPString_set(&res->diagnosticMessage, "Unknown extended operation.");
+    }
     return request;
 }
 

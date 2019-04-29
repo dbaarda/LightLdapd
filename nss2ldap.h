@@ -21,6 +21,10 @@
 /** Initialize an LDAPMessage and set its msgid. */
 #define LDAPMessage_init(msg, msgid) do { memset(msg, 0, sizeof(*msg)); msg->messageID = msgid; } while(0);
 
+/* LDAPString methods. */
+#define LDAPString_new(s) OCTET_STRING_new_fromBuf(&asn_DEF_LDAPString, (s), -1)
+#define LDAPString_set(str, s) OCTET_STRING_fromString((str), (s));
+
 #ifdef DEBUG
 #define LDAP_DEBUG(msg) asn_fprint(stdout, &asn_DEF_LDAPMessage, msg)
 #else

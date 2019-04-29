@@ -8,10 +8,10 @@
 #define LIGHTLDAPD_LDAP_SERVER_H
 
 #include "utils.h"
+#include "ssl.h"
 #include "asn1/LDAPMessage.h"
 #define EV_COMPAT3 0            /* Use the ev 4.X API. */
 #include <ev.h>
-#include <mbedtls/net_sockets.h>
 
 #define BUFFER_SIZE 16384
 typedef struct {
@@ -35,13 +35,15 @@ typedef struct ldap_reply ldap_reply;
 /** The ldap_server class. */
 typedef struct {
     mbedtls_net_context socket; /**< The mbedtls server socket used. */
-    char *basedn;               /**< The ldap basedn to use. */
+    const char *basedn;         /**< The ldap basedn to use. */
     uid_t rootuid;              /**< The uid of admin "root" user. */
     bool anonok;                /**< If anonymous bind is allowed. */
     ev_loop *loop;              /**< The libev loop to use. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
+    mbedtls_ssl_server ssl;     /**< The mbedtls ssl server config. */
 } ldap_server;
-void ldap_server_init(ldap_server *server, ev_loop *loop, char *basedn, uid_t rootuid, bool anonok);
+int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const uid_t rootuid, const bool anonok,
+                     const char *crtpath, const char *caspath, const char *keypath);
 void ldap_server_start(ldap_server *server, mbedtls_net_context socket);
 void ldap_server_stop(ldap_server *server);
 
@@ -61,6 +63,8 @@ typedef struct {
     ev_tstamp delay;            /**< The delay time to pause for. */
     buffer_t recv_buf;          /**< The buffer for incoming data. */
     buffer_t send_buf;          /**< The buffer for outgoing data. */
+    mbedtls_ssl_context ssl;    /**< The mbedtls ssl context. */
+    bool secure;
 } ldap_connection;
 ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket);
 void ldap_connection_free(ldap_connection *connection);
@@ -80,6 +84,7 @@ ldap_request *ldap_request_new(ldap_connection *connection, LDAPMessage_t *msg);
 void ldap_request_free(ldap_request *request);
 ldap_request *ldap_request_bind(ldap_connection *connection, LDAPMessage_t *msg);
 ldap_request *ldap_request_search(ldap_connection *connection, LDAPMessage_t *msg);
+ldap_request *ldap_request_extended(ldap_connection *connection, LDAPMessage_t *msg);
 void ldap_request_abandon(ldap_connection *connection, LDAPMessage_t *msg);
 ldap_status_t ldap_request_respond(ldap_request *request);
 #define ENTRY ldap_request
