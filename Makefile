@@ -2,12 +2,12 @@ TARGET=lightldapd
 CC=gcc
 AR=ar
 CFLAGS=-Wall -Wextra -fno-strict-aliasing
-LDFLAGS=-lev -lpam -lmbedtls
+LDFLAGS=-lev -lpam -lmbedtls -lmbedx509 -lmbedcrypto
 
 .PHONY: all debug clean install debian debclean tidy
 
 all: asn1/LDAP.a
-	$(CC) -Iasn1/ $(CFLAGS) $(LDFLAGS) main.c ldap_server.c pam.c nss2ldap.c $^ -o $(TARGET)
+	$(CC) -Iasn1/ $(CFLAGS) $(LDFLAGS) main.c ldap_server.c pam.c nss2ldap.c ssl.c $^ -o $(TARGET)
 
 asn1/LDAP.a: asn1
 	cd asn1 && $(CC) -I. $(CFLAGS) -c *.c
@@ -39,7 +39,7 @@ debclean:
 
 tidy:
 	# Reformat all code and comments to preferred coding style."
-	tidyc -ppi0 -R -C -T '/ev_\w+/' -T '/mbedtls_\w+/' -T '/ldap_\w+/' -T 'ENTRY' *.[ch]
+	tidyc -ppi0 -R -C -T '/(ev|mbedtls|ldap)_\w+/' -T 'ENTRY' *.[ch]
 
 check: CFLAGS += -DDEBUG
 check:
