@@ -20,7 +20,8 @@ When running lightldapd for tesing use::
 
 When searching with ldapsearch, you should use::
 
-  ldapsearch "uid=abo" -b "dc=lightldapd" -h localhost -v -x -D "uid=abo,ou=people,dc=lightldapd" -W
+  ldapsearch "uid=abo" -b "dc=lightldapd" -h localhost -v -x \
+    -D "uid=abo,ou=people,dc=lightldapd" -W
 
 Where the arguments provided are:
 
@@ -30,12 +31,77 @@ Where the arguments provided are:
   -x  is to use simple bind.
   -D DN  is the bind DN to use.
   -W  is to prompt for passwd.
+  -ZZ is to require tls.
 
 Without ``-b`` it uses the default from ``/etc/ldap/ldap.conf``.
 
 Without ``-D`` and ``-W`` it does an anonymous bind.
 
 With ``-D ""`` it also does an anonymous bind.
+
+With ``-ZZ`` it will start TLS first.
+
+Using TLS
+---------
+
+To use TLS you will need a cert+key and make sure that ldapsearch is
+configured to trust it. You can create a self-signed cert using
+openssl like this::
+
+  openssl req -new -x509 -nodes -sha256 -days 1000 \
+    -out lightldapd.crt -keyout lightldapd.key
+
+Make sure that you set the "Common Name" to the fully qualified
+hostname you will use. If you are using the loopback interface this
+will be ``localhost.localnet``. Note you also must use this fully
+qualified hostname for the ``-h`` argument to ldapsearch.
+
+Next you will need to tell ldapsearch to trust this certificate,
+otherwise it will fail mysteriously. This can be done temporarily by
+setting an enviroment variable::
+
+  export LDAPTLS_CACERT=lightldapd.crt
+
+You can then run lightldapd with TLS support enabled::
+
+  sudo ./lightldapd -l -a -r abo -C lightldapd.crt -K lightldapd.key
+
+When searching with ldapsearch, you should use::
+
+  ldapsearch "uid=abo" -b "dc=lightldapd" -h localhost.localnet -v -x -ZZ
+
+To make this more permanent so you don't need to keep doing it you can
+put the certs into the host's configuration. If you do this you
+probably want to generate a cert using your actual hostname and stop
+using the loopback interface::
+
+  openssl req -new -x509 -nodes -sha256 -days 1000 \
+    -out /etc/ssl/certs/lightldapd.crt \
+    -keyout /etc/ssl/private/lightldapd.key
+  sudo chown root:root /etc/ssl/certs/lightldapd.crt
+  sudo chmod 644 /etc/ssl/certs/lightldapd.crt
+  sudo chown root:ssl-cert /etc/ssl/certs/lightldapd.key
+  sudo chmod 640 /etc/ssl/certs/lightldapd.key
+
+On the client system, so you nolonger need to set LDAPTLS_CACERT for
+ldapsearch to work, you edit ``/etc/ldap/ldap.conf`` to include::
+
+  TLS_CACERT      /etc/ssl/certs/lightldapd.crt
+
+Note your client system will need a copy of the public
+``lightldapd.crt`` in the same ``/etc/ssl/certs/lightldapd.crt``
+location if it is a different host.
+
+You can then start lightldapd on the server to use these certs::
+
+  sudo ./lightldapd -a -r abo -C /etc/ssl/certs/lightldapd.crt \
+    -K /etc/ssl/private/lightldapd.key
+
+If you use a proper certificate signed by a publicly recognised
+certificate authority (like letsencrypt), you shouldn't need to copy
+``lightldapd.crt`` to clients and change `/etc/ldap/ldap.conf``. Note
+that you may also need to start lightldapd with the ``-A <ca-path>``
+argument.
 
 Coding Style
 ============
@@ -54,7 +120,7 @@ The coding style used is ``tidyc -ppi0 -R -C -T '/ev_\w+/' -T
 character indents instead of tabs, a max code line length of 120, and
 extra code line reformating. The tidyc tool does some additional
 formatting with ``sed`` to workaround some ``indent`` quirks and do
-additional comment formatting. 
+additional comment formatting.
 
 Always use typedef names instead of struct names when possible.
 
