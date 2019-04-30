@@ -50,8 +50,8 @@ int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, con
     server->loop = loop;
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
-    if (crtpath)
-        return mbedtls_ssl_server_init(&server->ssl, crtpath, caspath, keypath);
+    if (crtpath && !(server->ssl = mbedtls_ssl_server_new(crtpath, caspath, keypath)))
+        return 1;
     return 0;
 }
 
@@ -90,7 +90,7 @@ ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context so
     connection->delay = 0.0;
     buffer_init(&connection->recv_buf);
     buffer_init(&connection->send_buf);
-    connection->secure = false;
+    connection->ssl = NULL;
     ev_io_start(server->loop, &connection->read_watcher);
     return connection;
 }
@@ -104,8 +104,7 @@ void ldap_connection_free(ldap_connection *connection)
     LDAPMessage_free(connection->recv_msg);
     while (connection->request)
         ldap_request_free(connection->request);
-    if (connection->secure)
-        mbedtls_ssl_connection_done(&connection->ssl);
+    mbedtls_ssl_connection_free(connection->ssl);
     free(connection);
 }
 
@@ -223,8 +222,8 @@ void read_cb(ev_loop *loop, ev_io *watcher, int revents)
 
     if (EV_ERROR & revents)
         fail("got invalid event");
-    if (connection->secure)
-        buf_cnt = mbedtls_ssl_read(&connection->ssl, buffer_wpos(buf), buffer_wlen(buf));
+    if (connection->ssl)
+        buf_cnt = mbedtls_ssl_read(connection->ssl, buffer_wpos(buf), buffer_wlen(buf));
     else
         buf_cnt = mbedtls_net_recv(&connection->socket, buffer_wpos(buf), buffer_wlen(buf));
     if (buf_cnt <= 0) {
@@ -247,8 +246,8 @@ void write_cb(ev_loop *loop, ev_io *watcher, int revents)
     assert(connection->server->loop == loop);
     assert(&connection->write_watcher == watcher);
 
-    if (connection->secure)
-        buf_cnt = mbedtls_ssl_write(&connection->ssl, buffer_rpos(buf), buffer_rlen(buf));
+    if (connection->ssl)
+        buf_cnt = mbedtls_ssl_write(connection->ssl, buffer_rpos(buf), buffer_rlen(buf));
     else
         buf_cnt = mbedtls_net_send(&connection->socket, buffer_rpos(buf), buffer_rlen(buf));
     if (buf_cnt < 0) {
@@ -262,32 +261,30 @@ void write_cb(ev_loop *loop, ev_io *watcher, int revents)
 void handshake_cb(ev_loop *loop, ev_io *watcher, int revents)
 {
     ldap_connection *connection = watcher->data;
-    int ret;
-    assert(connection->server->loop == loop);
+    ldap_server *server = connection->server;
+    assert(server->loop == loop);
+    int err;
 
     /* Send all outstanding requests and data using write_cb() first. */
     if (connection->request || !buffer_empty(&connection->send_buf))
         return write_cb(loop, watcher, revents);
-    switch (ret = mbedtls_ssl_handshake(&connection->ssl)) {
-    case 0:
-        /* Handshake complete, set read/write watcher callbacks back. */
-        ev_set_cb(&connection->read_watcher, read_cb);
-        ev_set_cb(&connection->write_watcher, write_cb);
-        connection->secure = true;
-        return;
-    case MBEDTLS_ERR_SSL_WANT_READ:
-        ev_io_stop(loop, &connection->write_watcher);
-        ev_io_start(loop, &connection->read_watcher);
-        return;
-    case MBEDTLS_ERR_SSL_WANT_WRITE:
-        ev_io_stop(loop, &connection->read_watcher);
-        ev_io_start(loop, &connection->write_watcher);
-        return;
-    default:
-        /* Something went wrong during the handshake, close the connection. */
-        ldap_connection_free(connection);
-        mbedtls_fail("mbedtls_ssl_handshake", ret);
+    /* Create a new ssl context if needed. */
+    if (!connection->ssl)
+        connection->ssl = mbedtls_ssl_connection_new(server->ssl, &connection->socket);
+    if ((err = mbedtls_ssl_handshake(connection->ssl))) {
+        if (err == MBEDTLS_ERR_SSL_WANT_READ) {
+            return ev_io_stop(loop, &connection->write_watcher);
+        } else if (err == MBEDTLS_ERR_SSL_WANT_WRITE) {
+            return ev_io_start(loop, &connection->write_watcher);
+        } else {
+            /* The handshake failed, free the ssl context. */
+            mbedtls_ssl_connection_free(connection->ssl);
+            connection->ssl = NULL;
+        }
     }
+    /* Handshake over, set read/write watcher callbacks back. */
+    ev_set_cb(&connection->read_watcher, read_cb);
+    ev_set_cb(&connection->write_watcher, write_cb);
 }
 
 void goodbye_cb(ev_loop *loop, ev_io *watcher, int revents)
@@ -300,7 +297,6 @@ void delay_cb(ev_loop *loop, ev_timer *watcher, int revents)
 {
     assert(revents == EV_TIMER);
     ldap_connection *connection = watcher->data;
-
     assert(connection->server->loop == loop);
     assert(&connection->delay_watcher == watcher);
 
@@ -376,8 +372,7 @@ ldap_request *ldap_request_extended(ldap_connection *connection, LDAPMessage_t *
         res->resultCode = ExtendedResponse__resultCode_success;
         LDAPString_set(&res->diagnosticMessage, "Starting TLS handshake...");
         res->responseName = LDAPString_new(LDAPOID_StartTLS);
-        /* Init ssl context and change the watcher callbacks for handshake. */
-        mbedtls_ssl_connection_init(&connection->ssl, &server->ssl, &connection->socket);
+        /* Change the watcher callbacks for handshake. */
         ev_set_cb(&connection->read_watcher, handshake_cb);
         ev_set_cb(&connection->write_watcher, handshake_cb);
     } else {

@@ -22,8 +22,8 @@ typedef struct {
     mbedtls_x509_crt cert;
     mbedtls_pk_context pkey;
 } mbedtls_ssl_server;
-int mbedtls_ssl_server_init(mbedtls_ssl_server *srv, const char *crtpath, const char *caspath, const char *keypath);
-void mbedtls_ssl_server_done(mbedtls_ssl_server *srv);
+mbedtls_ssl_server *mbedtls_ssl_server_new(const char *crtpath, const char *caspath, const char *keypath);
+void mbedtls_ssl_server_free(mbedtls_ssl_server *srv);
 
-int mbedtls_ssl_connection_init(mbedtls_ssl_context *ssl, mbedtls_ssl_server *srv, mbedtls_net_context *socket);
-void mbedtls_ssl_connection_done(mbedtls_ssl_context *ssl);
+mbedtls_ssl_context *mbedtls_ssl_connection_new(mbedtls_ssl_server *srv, mbedtls_net_context *socket);
+void mbedtls_ssl_connection_free(mbedtls_ssl_context *ssl);

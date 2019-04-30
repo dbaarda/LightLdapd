@@ -40,7 +40,7 @@ typedef struct {
     bool anonok;                /**< If anonymous bind is allowed. */
     ev_loop *loop;              /**< The libev loop to use. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
-    mbedtls_ssl_server ssl;     /**< The mbedtls ssl server config. */
+    mbedtls_ssl_server *ssl;    /**< The mbedtls ssl server config. */
 } ldap_server;
 int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const uid_t rootuid, const bool anonok,
                      const char *crtpath, const char *caspath, const char *keypath);
@@ -63,8 +63,7 @@ typedef struct {
     ev_tstamp delay;            /**< The delay time to pause for. */
     buffer_t recv_buf;          /**< The buffer for incoming data. */
     buffer_t send_buf;          /**< The buffer for outgoing data. */
-    mbedtls_ssl_context ssl;    /**< The mbedtls ssl context. */
-    bool secure;
+    mbedtls_ssl_context *ssl;   /**< The mbedtls ssl context. */
 } ldap_connection;
 ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket);
 void ldap_connection_free(ldap_connection *connection);
