@@ -38,10 +38,9 @@ pam_ldap authentication and/or nss_ldap access to passwd, group, and
 shadow data. It now has TLS support so it should be safe to use on
 untrusted networks.
 
-The TLS support is new and still a bit rough. In particular, it
-doesn't gracefully shutdown TLS sessions and doesn't enforce TLS is
-active before allowing bind operations. This means it is possible for
-clients to accidentally use it insecurely on an untrusted network.
+The TLS support is new but fairly complete. If TLS is enabled it will
+require it be started for bind operations. This should prevent clients
+from accidentally using it insecurely on an untrusted network.
 
 It does not yet have any logging, which can make it hard to figure out
 what is wrong when something is not working.
