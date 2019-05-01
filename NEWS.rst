@@ -30,10 +30,28 @@ Changes in 1.0.0 (Not released yet)
 
   Reformat again using a different preferred style without tabs.
 
+* #9,#10 Improve design.
+
+  Restructured using ldap_server, ldap_connection, ldap_request,
+  ldap_reply structs, copying the design of
+  https://github.com/taf2/libebb.
+
 * Extend Search support.
 
-  Extend search support enough to support libnss-ldap clients,
+  Extended search support enough to support libnss-ldap clients,
   exporting the local nsswitch view of passwd/group/etc.
+
+  #3 Add support for typesOnly and attribute selection.
+
+* #2 Optimize Search.
+
+  Added Filter_scope() analysis to figure out what the search is
+  constrained to instead of scanning everything.
+
+* #4 Add StartTLS support.
+
+  StartTLS support with security checking before allowing bind
+  implemented using mbedtls.
 
 
 Changes in entente 1.1 (merged 2014-01-25)

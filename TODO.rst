@@ -15,11 +15,6 @@ Items
   Would prefer to require contributions to come back rather than spawn private
   forks. I have confirmed with the entente author this is OK.
 
-* #9,#10 Improve design.
-
-  Restructure using ldap_server, ldap_connection, ldap_request
-  structs, copying the design of https://github.com/taf2/libebb.
-
 * #8 Add tests.
 
   Currently there are no tests.
@@ -28,23 +23,23 @@ Items
 
   Using syslog. Or using glib's logging?
 
-* #4 Add StartTLS support.
-
-  Probably using mbedtls.
-
-* #2 Optimize Search.
-
-  Add Filter_scope() analysis to figure out what the search is
-  constrained to instead of scanning everything.
-
-  Add caching of scanned nss data.
-
 * Extend search functionality.
 
   #1 Add support for substrings, greaterOrEqual, lessOrEqual, approxMatch
   searches.
 
-  #3 Add support for typesOnly and attribute selection.
+* Make served users/groups configurable.
+
+  #13 Support serving only some user/group ranges.
+
+* Add support for other schemas.
+
+  Add simple support for custom schemas, ideally enough to support
+  windows auth for samba etc.
+
+* Add support for write changes.
+
+  Add enough write support to allow passwd changes from clients.
 
 ----
 
