@@ -208,6 +208,11 @@ void accept_cb(ev_loop *loop, ev_io *watcher, int revents)
         fail("got invalid event");
     if (mbedtls_net_accept(&server->socket, &socket, NULL, 0, NULL))
         fail("mbedtls_net_accept error");
+    /* We only need nonblock mode for mbedtls_ssl_handshake() to be non-blocking. */
+    if (mbedtls_net_set_nonblock(&socket)) {
+	mbedtls_net_free(&socket);
+	fail("mbedtls_net_set_nonblock");
+    }
     ldap_connection_new(server, socket);
 }
 
