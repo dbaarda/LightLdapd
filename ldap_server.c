@@ -50,6 +50,7 @@ int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, con
     server->loop = loop;
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
+    server->ssl = NULL;
     if (crtpath && !(server->ssl = mbedtls_ssl_server_new(crtpath, caspath, keypath)))
         return 1;
     return 0;
@@ -78,7 +79,7 @@ ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context so
 
     connection->server = server;
     connection->socket = socket;
-    connection->binduid = -1;
+    connection->binduid = (uid_t)(-1);
     ev_io_init(&connection->read_watcher, read_cb, socket.fd, EV_READ);
     connection->read_watcher.data = connection;
     ev_io_init(&connection->write_watcher, write_cb, socket.fd, EV_WRITE);
@@ -397,12 +398,17 @@ ldap_request *ldap_request_extended(ldap_connection *connection, LDAPMessage_t *
     reply->message.protocolOp.present = LDAPMessage__protocolOp_PR_extendedResp;
     LDAPString_set(&res->matchedDN, server->basedn);
     if (!strcmp((char *)req->requestName.buf, LDAPOID_StartTLS)) {
-        res->resultCode = ExtendedResponse__resultCode_success;
-        LDAPString_set(&res->diagnosticMessage, "Starting TLS handshake...");
         res->responseName = LDAPString_new(LDAPOID_StartTLS);
-        /* Change the watcher callbacks for handshake. */
-        ev_set_cb(&connection->read_watcher, handshake_cb);
-        ev_set_cb(&connection->write_watcher, handshake_cb);
+        if (server->ssl) {
+            res->resultCode = ExtendedResponse__resultCode_success;
+            LDAPString_set(&res->diagnosticMessage, "Starting TLS handshake...");
+            /* Change the watcher callbacks for handshake. */
+            ev_set_cb(&connection->read_watcher, handshake_cb);
+            ev_set_cb(&connection->write_watcher, handshake_cb);
+        } else {
+            res->resultCode = ExtendedResponse__resultCode_protocolError;
+            LDAPString_set(&res->diagnosticMessage, "TLS not enabled.");
+        }
     } else {
         res->resultCode = ExtendedResponse__resultCode_protocolError;
         LDAPString_set(&res->diagnosticMessage, "Unknown extended operation.");

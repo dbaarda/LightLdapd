@@ -88,16 +88,18 @@ void ldap_request_bind_pam(ldap_request *request)
 
     msg->protocolOp.present = LDAPMessage__protocolOp_PR_bindResponse;
     LDAPString_set(&resp->matchedDN, (const char *)req->name.buf);
-    if (server->anonok && req->name.size == 0) {
-        /* allow anonymous */
+    if (req->name.size == 0) {
+        /* anonymous bind */
         resp->resultCode = BindResponse__resultCode_success;
-        connection->binduid = -1;
+        connection->binduid = (uid_t)(-1);
     } else if (req->authentication.present == AuthenticationChoice_PR_simple) {
         /* simple auth */
         char user[PWNAME_MAX];
         char *pw = (char *)req->authentication.choice.simple.buf;
         char status[PAMMSG_LEN] = "";
-        if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
+        if (server->ssl && !connection->ssl) {
+            resp->resultCode = BindResponse__resultCode_confidentialityRequired;
+        } else if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
             resp->resultCode = BindResponse__resultCode_invalidDNSyntax;
         } else if (PAM_SUCCESS != auth_pam(user, pw, status, &connection->delay)) {
             resp->resultCode = BindResponse__resultCode_invalidCredentials;
@@ -107,7 +109,7 @@ void ldap_request_bind_pam(ldap_request *request)
             connection->binduid = name2uid(user);
         }
     } else {
-        /* sasl or anonymous auth */
+        /* sasl auth */
         resp->resultCode = BindResponse__resultCode_authMethodNotSupported;
     }
 }
@@ -120,16 +122,17 @@ void ldap_request_search_nss(ldap_request *request)
     ldap_connection *connection = request->connection;
     ldap_server *server = connection->server;
     const SearchRequest_t *req = &request->message->protocolOp.choice.searchRequest;
-    const bool bad_filter = !Filter_ok(&req->filter);
     int limit = req->sizeLimit;
     const char *basedn = server->basedn;
-    bool isroot = server->rootuid == connection->binduid;
+    const bool filterok = Filter_ok(&req->filter);
+    const bool isroot = server->rootuid == connection->binduid;
+    const bool isauth = server->anonok || connection->binduid != (uid_t)(-1);
 
     /* Adjust limit to RESPONSE_MAX if it is zero or too large. */
     limit = (limit && (limit < RESPONSE_MAX)) ? limit : RESPONSE_MAX;
     LDAPMessage_t *msg = &ldap_reply_new(request)->message;
     /* Add all the matching entries. */
-    if (!bad_filter) {
+    if (filterok && isauth) {
         scope_t scope;
         SearchRequest_scope(req, basedn, &scope);
         for (passwd_t *pw = scope_passwd_iter(&scope); pw && (request->count <= limit); pw = scope_passwd_next(&scope)) {
@@ -154,7 +157,10 @@ void ldap_request_search_nss(ldap_request *request)
     /* Otherwise construct a SearchResultDone. */
     msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResDone;
     SearchResultDone_t *done = &msg->protocolOp.choice.searchResDone;
-    if (bad_filter) {
+    if (!isauth) {
+        done->resultCode = LDAPResult__resultCode_insufficientAccessRights;
+        LDAPString_set(&done->diagnosticMessage, "anonymous search not permitted");
+    } else if (!filterok) {
         done->resultCode = LDAPResult__resultCode_other;
         LDAPString_set(&done->diagnosticMessage, "filter not supported");
     } else {
