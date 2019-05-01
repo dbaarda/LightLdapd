@@ -67,6 +67,7 @@ typedef struct {
 } ldap_connection;
 ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket);
 void ldap_connection_free(ldap_connection *connection);
+void ldap_connection_close(ldap_connection *connection);
 void ldap_connection_respond(ldap_connection *connection);
 ldap_status_t ldap_connection_send(ldap_connection *connection, LDAPMessage_t *msg);
 ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **msg);

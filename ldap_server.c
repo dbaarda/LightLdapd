@@ -108,6 +108,14 @@ void ldap_connection_free(ldap_connection *connection)
     free(connection);
 }
 
+void ldap_connection_close(ldap_connection *connection)
+{
+    /* Change the watcher callbacks for goodbye. */
+    ev_set_cb(&connection->read_watcher, goodbye_cb);
+    ev_set_cb(&connection->write_watcher, goodbye_cb);
+    ev_io_start(connection->server->loop, &connection->write_watcher);
+}
+
 void ldap_connection_respond(ldap_connection *connection)
 {
     assert(connection);
@@ -133,18 +141,18 @@ void ldap_connection_respond(ldap_connection *connection)
             break;
         default:
             /* For unknown or unbindRequest, close the connection. */
-            return ldap_connection_free(connection);
+            return ldap_connection_close(connection);
         }
         *msg = NULL;
     }
     /* If we got an error recieving messages, close the connection. */
     if (status == RC_FAIL)
-        return ldap_connection_free(connection);
+        return ldap_connection_close(connection);
     /* While there's a request and we are not blocked, respond to the request. */
     while (connection->request && (status = ldap_request_respond(connection->request)) == RC_OK) ;
     /* If we got an error sending messages, close the connection. */
     if (status == RC_FAIL)
-        return ldap_connection_free(connection);
+        return ldap_connection_close(connection);
     /* Update the state of all the connection watchers. */
     if (connection->delay && !ev_is_active(&connection->delay_watcher)) {
         ev_timer_set(&connection->delay_watcher, connection->delay, 0.0);
@@ -200,7 +208,6 @@ void accept_cb(ev_loop *loop, ev_io *watcher, int revents)
 {
     ldap_server *server = watcher->data;
     mbedtls_net_context socket;
-
     assert(server->loop == loop);
     assert(&server->connection_watcher == watcher);
 
@@ -221,7 +228,6 @@ void read_cb(ev_loop *loop, ev_io *watcher, int revents)
     ldap_connection *connection = watcher->data;
     buffer_t *buf = &connection->recv_buf;
     ssize_t buf_cnt;
-
     assert(connection->server->loop == loop);
     assert(&connection->read_watcher == watcher);
 
@@ -232,7 +238,7 @@ void read_cb(ev_loop *loop, ev_io *watcher, int revents)
     else
         buf_cnt = mbedtls_net_recv(&connection->socket, buffer_wpos(buf), buffer_wlen(buf));
     if (buf_cnt <= 0) {
-        ldap_connection_free(connection);
+        ldap_connection_close(connection);
         if (buf_cnt < 0)
             mbedtls_fail("mbedtls_net_recv", buf_cnt);
         return;
@@ -247,7 +253,6 @@ void write_cb(ev_loop *loop, ev_io *watcher, int revents)
     ldap_connection *connection = watcher->data;
     buffer_t *buf = &connection->send_buf;
     ssize_t buf_cnt;
-
     assert(connection->server->loop == loop);
     assert(&connection->write_watcher == watcher);
 
@@ -256,7 +261,7 @@ void write_cb(ev_loop *loop, ev_io *watcher, int revents)
     else
         buf_cnt = mbedtls_net_send(&connection->socket, buffer_rpos(buf), buffer_rlen(buf));
     if (buf_cnt < 0) {
-        ldap_connection_free(connection);
+        ldap_connection_close(connection);
         mbedtls_fail("mbedtls_net_send", buf_cnt);
     }
     buffer_consumed(buf, buf_cnt);
@@ -268,6 +273,7 @@ void handshake_cb(ev_loop *loop, ev_io *watcher, int revents)
     ldap_connection *connection = watcher->data;
     ldap_server *server = connection->server;
     assert(server->loop == loop);
+    assert(&connection->write_watcher == watcher || &connection->read_watcher == watcher);
     int err;
 
     /* Send all outstanding requests and data using write_cb() first. */
@@ -296,6 +302,23 @@ void goodbye_cb(ev_loop *loop, ev_io *watcher, int revents)
 {
     ldap_connection *connection = watcher->data;
     assert(connection->server->loop == loop);
+    assert(&connection->write_watcher == watcher || &connection->read_watcher == watcher);
+    int err;
+
+    /* Send all outstanding requests and data using write_cb() first. */
+    if (connection->request || !buffer_empty(&connection->send_buf))
+        return write_cb(loop, watcher, revents);
+    if (connection->ssl && (err = mbedtls_ssl_close_notify(connection->ssl))) {
+        if (err == MBEDTLS_ERR_SSL_WANT_READ) {
+            return ev_io_stop(loop, &connection->write_watcher);
+        } else if (err == MBEDTLS_ERR_SSL_WANT_WRITE) {
+            return ev_io_start(loop, &connection->write_watcher);
+        } else {
+            /* The goodbye failed. */
+        }
+    }
+    /* Goodbye over, free connection. */
+    ldap_connection_free(connection);
 }
 
 void delay_cb(ev_loop *loop, ev_timer *watcher, int revents)
