@@ -1,16 +1,21 @@
 TARGET=lightldapd
 CC=gcc
 AR=ar
-CFLAGS=-Wall -Wextra -fno-strict-aliasing
+CFLAGS=-Wall
 LDFLAGS=-lev -lpam -lmbedtls -lmbedx509 -lmbedcrypto
+SRCS=main.c ldap_server.c nss2ldap.c pam.c ssl.c
+TESTS=dlist_test
+CHECKS=$(TESTS:_test=_check)
 
-.PHONY: all debug clean install debian debclean tidy
+.PHONY: all debug clean install debian debclean tidy check
 
-all: asn1/LDAP.a
-	$(CC) -Iasn1/ $(CFLAGS) $(LDFLAGS) main.c ldap_server.c pam.c nss2ldap.c ssl.c $^ -o $(TARGET)
+all: $(TARGET)
 
-asn1/LDAP.a: asn1
-	cd asn1 && $(CC) -I. $(CFLAGS) -c *.c
+$(TARGET): $(SRCS) asn1/LDAP.a
+	$(CC) $(CFLAGS) -Iasn1/ -o $(TARGET) $^ $(LDFLAGS)
+
+asn1/LDAP.a: | asn1
+	cd asn1 && $(CC) -I. -D_DEFAULT_SOURCE $(CFLAGS) -c *.c
 	$(AR) rcs $@ asn1/*.o
 
 asn1:
@@ -20,7 +25,7 @@ debug: CFLAGS += -DDEBUG
 debug: all
 
 clean:
-	rm -rf $(TARGET) asn1/ *~
+	rm -rf $(TARGET) $(TESTS) asn1/ *~
 
 install:
 	if [ -z "$(DESTDIR)" ]; then exit 1; fi
@@ -41,7 +46,16 @@ tidy:
 	# Reformat all code and comments to preferred coding style."
 	tidyc -ppi0 -R -C -T '/(ev|mbedtls|ldap)_\w+/' -T 'ENTRY' *.[ch]
 
-check: CFLAGS += -DDEBUG
-check:
-	$(CC) $(CFLAGS) $(LDFLAGS) dlist_test.c -o dlist_test
-	./dlist_test
+# Note we depend on TESTS to compile them all first.
+check: $(TESTS) $(CHECKS)
+
+# Generic rule for compiling tests.
+%_test: CFLAGS += -DDEBUG
+%_test: %_test.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Generic rule for running tests.
+%_check: %_test
+	@./$< && echo "$<: Passed" >&2;
+
+# Additional dependencies needed for particular tests.
