@@ -64,8 +64,8 @@ Name                 Description
 `<LICENSE>`_         Copyright and Licencing details.
 `<NEWS.rst>`_        Summary of fixes and changes for each release.
 `<TODO.rst>`_        List of outstanding tasks and future plans.
-ldap.asn1            The asn1 ldap protocol specification.
-*.[ch]               The project source code.
+`ldap.asn1`          The asn1 ldap protocol specification.
+`*.[ch]`             The project source code.
 ==================== ======================================================
 
 .. It wouldn't hurt to have a few paragraphs here suggesting were to
@@ -124,8 +124,8 @@ Options
 -C crtpath  Optional path to an ssl cert to use for TLS.
 -A ca-path  Optional path to a ca-chain to use for TLS.
 -K keypath  Optional path to a private key to use for TLS.
--U 1000-29999  Optional comma-separated list of uids or uid-ranges to export.
--G 100,1000-29999  Optional comma-separated list of gids or gid-ranges to export.
+-U uids  Optional comma-separated list of uids or uid-ranges to export.
+-G gids  Optional comma-separated list of gids or gid-ranges to export.
 
 Note lightldapd must run as root to open the default ldap serving
 port, but using ``-u runuser`` it will use setuid() to drop root
