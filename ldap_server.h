@@ -9,6 +9,7 @@
 
 #include "utils.h"
 #include "ssl.h"
+#include "ranges.h"
 #include "asn1/LDAPMessage.h"
 #define EV_COMPAT3 0            /* Use the ev 4.X API. */
 #include <ev.h>
@@ -38,12 +39,15 @@ typedef struct {
     const char *basedn;         /**< The ldap basedn to use. */
     uid_t rootuid;              /**< The uid of admin "root" user. */
     bool anonok;                /**< If anonymous bind is allowed. */
+    const ldap_ranges *uids;    /**< The ranges of uids exported. */
+    const ldap_ranges *gids;    /**< The ranges of gids exported. */
     ev_loop *loop;              /**< The libev loop to use. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
     mbedtls_ssl_server *ssl;    /**< The mbedtls ssl server config. */
 } ldap_server;
 int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const uid_t rootuid, const bool anonok,
-                     const char *crtpath, const char *caspath, const char *keypath);
+                     const char *crtpath, const char *caspath, const char *keypath, const ldap_ranges *uids,
+                     const ldap_ranges *gids);
 void ldap_server_start(ldap_server *server, mbedtls_net_context socket);
 void ldap_server_stop(ldap_server *server);
 

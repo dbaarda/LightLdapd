@@ -6,6 +6,7 @@
 
 #include "nss2ldap.h"
 #include "pam.h"
+#include "ranges.h"
 #include <grp.h>
 #include <pwd.h>
 #include <shadow.h>
@@ -23,9 +24,11 @@ typedef struct {
     const char *uid;            /**< Specific passwd uid to search. */
     const char *uidNumber;      /**< Specific passwd uidNumber to search. */
     const char *cn;             /**< Specific group cn to search. */
-    const char *gidNumber;      /**< Specific group uidNumber to search */
+    const char *gidNumber;      /**< Specific group uidNumber to search. */
+    const ldap_ranges *uids;    /**< The ranges of uids exported. */
+    const ldap_ranges *gids;    /**< The ranges of gids exported. */
 } scope_t;
-static void scope_init(scope_t *s);
+static void scope_init(scope_t *s, const ldap_ranges *uids, const ldap_ranges *gids);
 static scope_t *scope_and(scope_t *s, scope_t *o);
 static scope_t *scope_or(scope_t *s, scope_t *o);
 static scope_t *scope_not(scope_t *s);
@@ -58,7 +61,7 @@ static void SearchResultEntry_group(SearchResultEntry_t *res, const char *basedn
 
 /* SearchRequest methods. */
 static bool SearchRequest_select(const SearchRequest_t *req, SearchResultEntry_t *res);
-static scope_t *SearchRequest_scope(const SearchRequest_t *req, const char *basedn, scope_t *scope);
+static scope_t *SearchRequest_scope(const SearchRequest_t *req, const ldap_server *server, scope_t *scope);
 
 /* AttributeSelection methods. */
 static bool AttributeSelection_contains(const AttributeSelection_t *sel, const char *type);
@@ -134,7 +137,7 @@ void ldap_request_search_nss(ldap_request *request)
     /* Add all the matching entries. */
     if (filterok && isauth) {
         scope_t scope;
-        SearchRequest_scope(req, basedn, &scope);
+        SearchRequest_scope(req, server, &scope);
         for (passwd_t *pw = scope_passwd_iter(&scope); pw && (request->count <= limit); pw = scope_passwd_next(&scope)) {
             msg->protocolOp.present = LDAPMessage__protocolOp_PR_searchResEntry;
             SearchResultEntry_t *entry = &msg->protocolOp.choice.searchResEntry;
@@ -170,10 +173,12 @@ void ldap_request_search_nss(ldap_request *request)
 }
 
 /* Initialize a search scope to include everything. */
-static void scope_init(scope_t *s)
+static void scope_init(scope_t *s, const ldap_ranges *uids, const ldap_ranges *gids)
 {
     s->mask = -1;
     s->uid = s->uidNumber = s->cn = s->gidNumber = NULL;
+    s->uids = uids;
+    s->gids = gids;
 }
 
 /* Logical 'and' of two search scopes. */
@@ -243,21 +248,27 @@ static passwd_t *scope_passwd_iter(scope_t *s)
     if (!(s->mask & SCOPE_PASSWD)) {
         return NULL;
     } else if (s->uidNumber) {
-        /* printf("getpwuid(%d)\n", atoi(s->uidNumber)); */
-        return getpwuid(atoi(s->uidNumber));
+        uid_t uid = atoi(s->uidNumber);
+        /* printf("getpwuid(%d)\n", uid); */
+        return ldap_ranges_ismatch(s->uids, uid) ? getpwuid(uid) : NULL;
     } else if (s->uid) {
         /* printf("getpwnam(%s)\n", s->uid); */
-        return getpwnam(s->uid);
+        passwd_t *p = getpwnam(s->uid);
+        return (p && ldap_ranges_ismatch(s->uids, p->pw_uid)) ? p : NULL;
     } else {
         /* printf("getpwent()\n"); */
-        return getpwent();
+        return scope_passwd_next(s);
     }
 }
 
 /* Iterate to the next passwd entry included in a scope. */
 static passwd_t *scope_passwd_next(scope_t *s)
 {
-    return (!s->uid && !s->uidNumber) ? getpwent() : NULL;
+    passwd_t *p = NULL;
+
+    if (!s->uid && !s->uidNumber)
+        while ((p = getpwent()) && !ldap_ranges_ismatch(s->uids, p->pw_uid)) ;
+    return p;
 }
 
 /* Stop iterating through passwd entries included in a scope. */
@@ -273,21 +284,27 @@ static group_t *scope_group_iter(scope_t *s)
     if (!(s->mask & SCOPE_GROUP)) {
         return NULL;
     } else if (s->gidNumber) {
-        /* printf("getgrgid(%d)\n", atoi(s->gidNumber)); */
-        return getgrgid(atoi(s->gidNumber));
+        gid_t gid = atoi(s->gidNumber);
+        /* printf("getgrgid(%d)\n", gid); */
+        return ldap_ranges_ismatch(s->gids, gid) ? getgrgid(gid) : NULL;
     } else if (s->cn) {
         /* printf("getgrnam(%s)\n", s->cn); */
-        return getgrnam(s->cn);
+        group_t *g = getgrnam(s->cn);
+        return (g && ldap_ranges_ismatch(s->gids, g->gr_gid)) ? g : NULL;
     } else {
         /* printf("getgrent()\n"); */
-        return getgrent();
+        return scope_group_next(s);
     }
 }
 
 /* Iterate to the next group entry included in a scope. */
 static group_t *scope_group_next(scope_t *s)
 {
-    return (!s->cn && !s->gidNumber) ? getgrent() : NULL;
+    group_t *g = NULL;
+
+    if (!s->cn && !s->gidNumber)
+        while ((g = getgrent()) && !ldap_ranges_ismatch(s->gids, g->gr_gid)) ;
+    return g;
 }
 
 /* Stop iterating through group entries included in a scope. */
@@ -519,26 +536,27 @@ static bool SearchRequest_select(const SearchRequest_t *req, SearchResultEntry_t
 }
 
 /* Get the scope for a SearchRequest. */
-static scope_t *SearchRequest_scope(const SearchRequest_t *req, const char *basedn, scope_t *scope)
+static scope_t *SearchRequest_scope(const SearchRequest_t *req, const ldap_server *server, scope_t *scope)
 {
     assert(req);
-    assert(basedn);
+    assert(server);
     assert(scope);
+    const char *basedn = server->basedn;
     const char *reqbasedn = (const char *)req->baseObject.buf;
     char passwdbasedn[STRING_MAX] = "ou=people,";
     char groupbasedn[STRING_MAX] = "ou=groups,";
-    scope_t dnscope;
+    scope_t fscope;
 
     /* Get the basedn's for passwd and group data. */
     strcat(passwdbasedn, basedn);
     strcat(groupbasedn, basedn);
     /* Set dnscope to exclude passwd or group depending on reqbasedn. */
-    scope_init(&dnscope);
+    scope_init(scope, server->uids, server->gids);
     if (!strends(passwdbasedn, reqbasedn))
-        dnscope.mask &= ~SCOPE_PASSWD;
+        scope->mask &= ~SCOPE_PASSWD;
     if (!strends(groupbasedn, reqbasedn))
-        dnscope.mask &= ~SCOPE_GROUP;
-    return scope_and(Filter_scope(&req->filter, scope), &dnscope);
+        scope->mask &= ~SCOPE_GROUP;
+    return scope_and(scope, Filter_scope(&req->filter, &fscope));
 }
 
 /* Check if an AttributeSelection contains an attribute type. */
@@ -584,7 +602,7 @@ static scope_t *AttributeValueAssertion_equal_scope(const AttributeValueAssertio
     const char *name = (const char *)equal->attributeDesc.buf;
     const char *value = (const char *)equal->assertionValue.buf;
 
-    scope_init(scope);
+    scope_init(scope, NULL, NULL);
     if (!strcmp(name, "objectClass")) {
         if (!strcmp(value, "posixAccount") || !strcmp(value, "shadowAccount"))
             scope->mask = SCOPE_PASSWD;
@@ -697,7 +715,7 @@ static scope_t *Filter_scope(const Filter_t *filter, scope_t *scope)
     case Filter_PR_approxMatch:
     case Filter_PR_extensibleMatch:
     default:
-        scope_init(scope);
+        scope_init(scope, NULL, NULL);
         return scope;
     }
 }

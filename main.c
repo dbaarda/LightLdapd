@@ -7,6 +7,7 @@
 
 #include "utils.h"
 #include "ldap_server.h"
+#include "ranges.h"
 #include <unistd.h>
 
 char *setting_basedn = "dc=lightldapd";
@@ -19,6 +20,8 @@ bool setting_anonok = 0;
 char *setting_crtpath = NULL;
 char *setting_caspath = NULL;
 char *setting_keypath = NULL;
+char *setting_uids = "1000-29999";
+char *setting_gids = "100,1000-29999";
 void settings(int argc, char **argv);
 
 int main(int argc, char **argv)
@@ -27,16 +30,21 @@ int main(int argc, char **argv)
     mbedtls_net_context socket;
     ldap_server server;
     char *server_addr;
+    ldap_ranges uids, gids;
 
     settings(argc, argv);
     server_addr = setting_loopback ? "127.0.0.1" : NULL;
+    if (!ldap_ranges_init(&uids, setting_uids))
+        errx(EX_USAGE, "Invalid -U value: \"%s\"", setting_uids);
+    if (!ldap_ranges_init(&gids, setting_gids))
+        errx(EX_USAGE, "Invalid -G value: \"%s\"", setting_gids);
     if (setting_daemon && daemon(0, 0))
         fail1("daemon", 1);
     if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
         fail1("mbdedtls_net_bind", 1);
     if (ldap_server_init
         (&server, loop, setting_basedn, setting_rootuid, setting_anonok, setting_crtpath, setting_caspath,
-         setting_keypath))
+         setting_keypath, &uids, &gids))
         fail1("ldap_server_init", 1);
     if (setting_setuid && setuid(setting_setuid))
         fail1("setuid", 1);
@@ -49,7 +57,7 @@ void settings(int argc, char **argv)
 {
     int c;
 
-    while ((c = getopt(argc, argv, "ab:dlp:r:u:C:A:K:")) != -1) {
+    while ((c = getopt(argc, argv, "ab:dlp:r:u:C:A:K:G:U:")) != -1) {
         switch (c) {
         case 'a':
             setting_anonok = true;
@@ -81,10 +89,16 @@ void settings(int argc, char **argv)
         case 'K':
             setting_keypath = optarg;
             break;
+        case 'G':
+            setting_gids = optarg;
+            break;
+        case 'U':
+            setting_uids = optarg;
+            break;
         default:
             fprintf(stderr,
-                    "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r root] [-u user] "
-                    "[-C crtfile] [-A ca-file] [-K keyfile]\n", argv[0]);
+                    "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r root] [-u user] \\\n"
+                    "  [-C crtfile] [-A ca-file] [-K keyfile] [-U 1000-29999,...] [-G 100,1000-29999,...]", argv[0]);
             exit(1);
         }
     }

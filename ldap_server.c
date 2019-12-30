@@ -41,12 +41,15 @@ void buffer_consumed(buffer_t *buffer, size_t len)
 }
 
 int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const uid_t rootuid, const bool anonok,
-                     const char *crtpath, const char *caspath, const char *keypath)
+                     const char *crtpath, const char *caspath, const char *keypath, const ldap_ranges *uids,
+                     const ldap_ranges *gids)
 {
     mbedtls_net_init(&server->socket);
     server->basedn = basedn;
     server->rootuid = rootuid;
     server->anonok = anonok;
+    server->uids = uids;
+    server->gids = gids;
     server->loop = loop;
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
