@@ -125,9 +125,9 @@ Options
 -A ca-path  Optional path to a ca-chain to use for TLS.
 -K keypath  Optional path to a private key to use for TLS.
 -U uids  Optional comma-separated list of uids or uid-ranges to export
-(default: "1000-29999").
+  (default: "1000-29999").
 -G gids  Optional comma-separated list of gids or gid-ranges to export
-(default: "100,1000-29999).
+  (default: "100,1000-29999").
 
 Note lightldapd must run as root to open the default ldap serving
 port, but using ``-u runuser`` it will use setuid() to drop root
