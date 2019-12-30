@@ -1,8 +1,19 @@
-# Whether or not to run lightldapd; set to 0 to disable.
-ENABLED=1
+# Whether or not to run lightldapd; set to 1 to enable.
+ENABLED=0
 
 # Set the BASEDN to use.
 BASEDN="dc=lightldapd"
 
-# Set the options to use.
-DAEMON_OPTS="-d -b $BASEDN -p 389 -l -a"
+# Set the uids and gids to expose, using adduser.conf if it exists.
+[ -r /etc/adduser.conf ] && . /etc/adduser.conf
+UIDS=${FIRST_UID:-1000}-${LAST_UID:-29999}
+GIDS=${USERS_GID:-100},${FIRST_GID:-1000}-${LAST_GID:-29999}
+
+# Set options for loopback only without ssl support.
+DAEMON_OPTS="-d -b $BASEDN -p 389 -l -a -U $UIDS -G $GIDS"
+
+# Setup certs and use the following for a public server with full ssl support.
+#CRTFILE=/etc/ssl/certs/server.crt
+#KEYFILE=/etc/ssl/private/server.key
+#CAFILE=/etc/ssl/certs/fullchain.pem
+#DAEMON_OPTS="-d -b $BASEDN -a -C $CRTFILE -K $KEYFILE -A $CAFILE -U $UIDS -G $GIDS"
