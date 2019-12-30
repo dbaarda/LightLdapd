@@ -14,7 +14,7 @@ struct entry {
 #define ENTRY entry
 #include "dlist.h"
 
-int main(int argc, char **argv)
+int main(void)
 {
     entry *l = NULL, *e;
     entry e1, e2, e3;
