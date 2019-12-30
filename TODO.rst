@@ -28,10 +28,6 @@ Items
   #1 Add support for substrings, greaterOrEqual, lessOrEqual, approxMatch
   searches.
 
-* Make served users/groups configurable.
-
-  #13 Support serving only some user/group ranges.
-
 * Add support for other schemas.
 
   Add simple support for custom schemas, ideally enough to support

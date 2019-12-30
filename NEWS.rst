@@ -53,6 +53,10 @@ Changes in 1.0.0 (Not released yet)
   StartTLS support with security checking before allowing bind
   implemented using mbedtls.
 
+* #13 Make served users/groups configurable.
+
+  Support serving only some user/group ranges.
+
 
 Changes in entente 1.1 (merged 2014-01-25)
 ==========================================

@@ -55,18 +55,18 @@ Contents
    distribution. It should include a list of important features in a
    table like this;
 
-=============== ======================================================
-Name       Description
-=============== ======================================================
-README.rst      This file.
-DESIGN.rst      Details of the design.
-DEVELOPMENT.rst Instructions for developers.
-LICENSE         Copyright and Licencing details.
-NEWS.rst        Summary of fixes and changes for each release.
-TODO.rst        List of outstanding tasks and future plans.
-ldap.asn1       The asn1 ldap protocol specification.
-*.[ch]          The project source code.
-=============== ======================================================
+==================== ======================================================
+Name                 Description
+==================== ======================================================
+`<README.rst>`_      This file.
+`<DESIGN.rst>`_      Details of the design.
+`<DEVELOPMENT.rst>`_ Instructions for developers.
+`<LICENSE>`_         Copyright and Licencing details.
+`<NEWS.rst>`_        Summary of fixes and changes for each release.
+`<TODO.rst>`_        List of outstanding tasks and future plans.
+ldap.asn1            The asn1 ldap protocol specification.
+*.[ch]               The project source code.
+==================== ======================================================
 
 .. It wouldn't hurt to have a few paragraphs here suggesting were to
    look in the distribution for bits and pieces.
@@ -124,6 +124,8 @@ Options
 -C crtpath  Optional path to an ssl cert to use for TLS.
 -A ca-path  Optional path to a ca-chain to use for TLS.
 -K keypath  Optional path to a private key to use for TLS.
+-U 1000-29999  Optional comma-separated list of uids or uid-ranges to export.
+-G 100,1000-29999  Optional comma-separated list of gids or gid-ranges to export.
 
 Note lightldapd must run as root to open the default ldap serving
 port, but using ``-u runuser`` it will use setuid() to drop root
@@ -152,6 +154,13 @@ is set readable only by root. It is important to configure your
 clients to use TLS and trust the cert used. If you are using
 self-signed certs this typically means giving them a copy of the
 public cert.
+
+To only expose a subset of your local uids or gids over ldap, use the `-U` and
+`-G` options, setting them to a comma-separated list of ids or id-ranges to
+include. The defaults are `-U 1000-29999` and `-G 100,1000-29999`. This
+ensures that system users and groups are not exported, as clients typically
+define their own system users and groups in their own /etc/passwd and
+/etc/group configs.
 
 Example usage with lighttpd
 ---------------------------
@@ -210,9 +219,9 @@ tracker.
 Development
 ===========
 
-See DEVELOPMENT.rst for development instructions.
+See `<DEVELOPMENT.rst>`_ for development instructions including debugging.
 
-See DESIGN.rst for general design philosophy and ideas.
+See `<DESIGN.rst>`_ for general design philosophy and ideas.
 
 ----
 
