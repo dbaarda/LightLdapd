@@ -2,13 +2,13 @@ Source: lightldapd
 Section: admin
 Priority: optional
 Maintainer: Donovan Baarda <abo@minkirri.apana.org.au>
-Recommends: adduser
 Build-Depends: asn1c (>= 0.9), debhelper (>> 5), libev-dev (>= 3.0), libpam0g-dev (>= 0.99.7.1), libmbedtls-dev (>= 2.16.0-1)
 Standards-Version: 3.8.4
 
 Package: lightldapd
 Architecture: any
 Depends: ${shlibs:Depends}
+Recommends: adduser
 Homepage: https://github.com/dbaarda/LightLdapd
 Description: Tiny LDAP server exporting NSS databases using PAM authentication.
  LightLdapd is a small and easy to manage LDAP server for small
