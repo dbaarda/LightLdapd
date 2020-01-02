@@ -2,7 +2,7 @@
  * Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
  * Based on entente Copyright (c) 2010, 2011 Sergey Urbanovich
  *
- * Licensed under the MIT License. See LICENSE file for details.
+ * Licensed under the GPLv3 License. See LICENSE file for details.
  */
 
 #include "ldap_server.h"

@@ -1,7 +1,7 @@
 /*=
  * Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
  *
- * Licensed under the MIT License. See LICENSE file for details.
+ * Licensed under the GPLv3 License. See LICENSE file for details.
  */
 #ifndef LIGHTLDAPD_NSS2LDAP_H
 #define LIGHTLDAPD_NSS2LDAP_H
