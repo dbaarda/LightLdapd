@@ -2,18 +2,12 @@
 LightLdapd TODO
 ===============
 
-This is a list of outstanding TODO items in aproximate order of most
-important first. Feel free to add things to this list. Please ensure
-that user visible things are moved from here to the NEWS file when
-they get done.
+This is a list of outstanding TODO items in aproximate order of most important
+first. Feel free to add things to this list. Please ensure that user visible
+things are moved from here to the NEWS file when they get done.
 
 Items
 =====
-
-* Change license from MIT to GPL?
-
-  Would prefer to require contributions to come back rather than spawn private
-  forks. I have confirmed with the entente author this is OK.
 
 * #8 Add tests.
 
@@ -23,19 +17,32 @@ Items
 
   Using syslog. Or using glib's logging?
 
-* Extend search functionality.
+* #1 Extend search functionality.
 
-  #1 Add support for substrings, greaterOrEqual, lessOrEqual, approxMatch
+  Add support for substrings, greaterOrEqual, lessOrEqual, approxMatch
   searches.
 
-* Add support for other schemas.
+* #14 Add support for a RootDSE.
 
-  Add simple support for custom schemas, ideally enough to support
-  windows auth for samba etc.
+  This gives clients the ability to discover supported functionality. See
+  https://ldapwiki.com/wiki/RootDSE for details.
 
-* Add support for write changes.
+* #7 Make debian package create a lightldap user.
+
+  It should create a lightldapd user and run lightldapd with '-u lightldapd'
+  instead of running as root. Maybe also optionally set a password for
+  lightldapd, add lightldapd to group shadow, and run it with '-r lightldapd'
+  to optionally support exporting shadow.
+
+* #5 Add support for other request types.
 
   Add enough write support to allow passwd changes from clients.
+
+* #15 Add support for other schemas.
+
+  Add simple support for custom schemas, ideally enough to support windows
+  auth for samba etc.
+
 
 ----
 
