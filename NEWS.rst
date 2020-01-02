@@ -7,8 +7,8 @@ includes references to bug and patch numbers. Please ensure that things are
 moved to here from the TODO file as they get done. Before doing a release
 please ensure that this document is up to date.
 
-Changes in 1.0.0 (Not released yet)
-===================================
+Changes in 1.0.0 (released 2020-01-02)
+======================================
 
 * Forked LightLdapd project from entente.
 
