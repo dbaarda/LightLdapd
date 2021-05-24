@@ -4,7 +4,7 @@ AR=ar
 CFLAGS=-Wall -Wextra
 LDFLAGS=-lev -lpam -lmbedtls -lmbedx509 -lmbedcrypto
 SRCS=main.c ldap_server.c nss2ldap.c pam.c ssl.c ranges.c
-TESTS=dlist_test ranges_test
+TESTS=dlist_test ranges_test buffer_test
 CHECKS=$(TESTS:_test=_check)
 
 .PHONY: all debug clean install debian debclean tidy check

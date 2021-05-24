@@ -1,33 +1,20 @@
-/*=
- * Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
+/** \file ldap_server.h
+ * An LDAP server and supporting classes.
+ *
+ * \copyright Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
  * Based on entente Copyright (c) 2010, 2011 Sergey Urbanovich
  *
- * Licensed under the GPLv3 License. See LICENSE file for details.
- */
+ * \licence Licensed under the GPLv3 License. See LICENSE file for details. */
 #ifndef LIGHTLDAPD_LDAP_SERVER_H
 #define LIGHTLDAPD_LDAP_SERVER_H
 
 #include "utils.h"
 #include "ssl.h"
+#include "buffer.h"
 #include "ranges.h"
 #include "asn1/LDAPMessage.h"
 #define EV_COMPAT3 0            /* Use the ev 4.X API. */
 #include <ev.h>
-
-#define BUFFER_SIZE 16384
-typedef struct {
-    unsigned char buf[BUFFER_SIZE];
-    size_t len;
-} buffer_t;
-void buffer_init(buffer_t *buffer);
-void buffer_appended(buffer_t *buffer, size_t len);
-void buffer_consumed(buffer_t *buffer, size_t len);
-#define buffer_wpos(buffer) ((buffer)->buf + (buffer)->len)
-#define buffer_wlen(buffer) (BUFFER_SIZE - (buffer)->len)
-#define buffer_rpos(buffer) ((buffer)->buf)
-#define buffer_rlen(buffer) ((buffer)->len)
-#define buffer_empty(buffer) (!(buffer)->len)
-#define buffer_full(buffer) ((buffer)->len == BUFFER_SIZE)
 
 /* Pre-declare types needed for forward referencing. */
 typedef struct ldap_request ldap_request;

@@ -17,29 +17,6 @@ void delay_cb(EV_P_ ev_timer *w, int revents);
 void handshake_cb(ev_loop *loop, ev_io *watcher, int revents);
 void goodbye_cb(ev_loop *loop, ev_io *watcher, int revents);
 
-void buffer_init(buffer_t *buffer)
-{
-    buffer->len = 0;
-}
-
-void buffer_appended(buffer_t *buffer, size_t len)
-{
-    assert(len <= buffer_wlen(buffer));
-
-    buffer->len += len;
-}
-
-void buffer_consumed(buffer_t *buffer, size_t len)
-{
-    assert(len <= buffer_rlen(buffer));
-
-    buffer->len -= len;
-    /* Shuffle any remaining data to start of buffer. */
-    if (buffer->len) {
-        memmove(buffer->buf, buffer->buf + len, buffer->len);
-    }
-}
-
 int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const uid_t rootuid, const bool anonok,
                      const char *crtpath, const char *caspath, const char *keypath, const ldap_ranges *uids,
                      const ldap_ranges *gids)
@@ -184,7 +161,7 @@ ldap_status_t ldap_connection_send(ldap_connection *connection, LDAPMessage_t *m
     /* If it failed the buffer was full, return RC_WMORE to try again. */
     if (rencode.encoded == -1)
         return RC_WMORE;
-    buffer_appended(buf, rencode.encoded);
+    buffer_fill(buf, rencode.encoded);
     LDAP_DEBUG(msg);
     return RC_OK;
 }
@@ -199,7 +176,7 @@ ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **
         return RC_WMORE;
     /* from asn1c's FAQ: If you want BER or DER encoding, use der_encode(). */
     rdecode = ber_decode(0, &asn_DEF_LDAPMessage, (void **)msg, buffer_rpos(buf), buffer_rlen(buf));
-    buffer_consumed(buf, rdecode.consumed);
+    buffer_toss(buf, rdecode.consumed);
     if (rdecode.code == RC_FAIL) {
         fail1("ber_decode", RC_FAIL);
     } else if (rdecode.code == RC_OK) {
@@ -247,7 +224,7 @@ void read_cb(ev_loop *loop, ev_io *watcher, int revents)
             mbedtls_fail("mbedtls_net_recv", buf_cnt);
         return;
     }
-    buffer_appended(buf, buf_cnt);
+    buffer_fill(buf, buf_cnt);
     ldap_connection_respond(connection);
 }
 
@@ -268,7 +245,7 @@ void write_cb(ev_loop *loop, ev_io *watcher, int revents)
         ldap_connection_close(connection);
         mbedtls_fail("mbedtls_net_send", buf_cnt);
     }
-    buffer_consumed(buf, buf_cnt);
+    buffer_toss(buf, buf_cnt);
     ldap_connection_respond(connection);
 }
 
