@@ -1,8 +1,9 @@
-/*=
- * Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
+/** \file nss2ldap.h
+ * LDAP request handers using NSS and PAM.
  *
- * Licensed under the GPLv3 License. See LICENSE file for details.
- */
+ * \copyright Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
+ *
+ * \licence Licensed under the GPLv3 License. See LICENSE file for details. */
 #ifndef LIGHTLDAPD_NSS2LDAP_H
 #define LIGHTLDAPD_NSS2LDAP_H
 #include "utils.h"

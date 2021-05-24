@@ -1,10 +1,9 @@
-/* \file range.h
-
-   Utilities for storing and matching against uid/gid ranges.
-
-   Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
-
-   Licensed under the GPLv3 License. See LICENSE file for details. */
+/** \file range.h
+ * Utilities for storing and matching against uid/gid ranges.
+ *
+ * \copyright Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
+ *
+ * \licence Licensed under the GPLv3 License. See LICENSE file for details. */
 #ifndef RANGE_H
 #define RANGE_H
 #include <stdbool.h>
@@ -22,7 +21,7 @@ static inline bool ldap_range_ismatch(const ldap_range *r, const uid_t id);
 
 /** The sequence of ranges class. */
 typedef struct {
-    int count;                  /**< The first value of the range. */
+    int count;                  /**< The number of ranges. */
     ldap_range range[RANGES_SIZE];      /**< The ranges. */
 } ldap_ranges;
 int ldap_ranges_init(ldap_ranges *r, const char *s);

@@ -1,8 +1,9 @@
-/*=
- * Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
+/** \file utils.h
+ * General utility functions.
  *
- * Licensed under the GPLv3 License. See LICENSE file for details.
- */
+ * \copyright Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
+ *
+ * \licence Licensed under the GPLv3 License. See LICENSE file for details. */
 #ifndef LIGHTLDAPD_UTILS_H
 #define LIGHTLDAPD_UTILS_H
 

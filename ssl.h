@@ -1,9 +1,10 @@
-/*=
- * Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
+/** \file ssl.h
+ * SSL server class using mbedtls.
+ *
+ * \copyright Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
  * Based on mbedtls provided examples.
  *
- * Licensed under the GPLv3 License. See LICENSE file for details.
- */
+ * \licence Licensed under the GPLv3 License. See LICENSE file for details. */
 
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>

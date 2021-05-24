@@ -1,11 +1,9 @@
-/*=
- * Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
- *
- * Licensed under the GPLv3 License. See LICENSE file for details.
- */
-
 /** \file dlist.h
  * A simple circular doubly linked list.
+ *
+ * \copyright Copyright (c) 2017 Donovan Baarda <abo@minkirri.apana.org.au>
+ *
+ * \licence Licensed under the GPLv3 License. See LICENSE file for details.
  *
  * This is used by defining ENTRY to the name of your dlist entry type and
  * including this header file. The dlist is just a pointer to the head ENTRY of
