@@ -196,11 +196,12 @@
 
         SubstringFilter ::= SEQUENCE {
              type           AttributeDescription,
-             substrings     SEQUENCE SIZE (1..MAX) OF substring CHOICE {
-                  initial [0] AssertionValue,  -- can occur at most once
-                  any     [1] AssertionValue,
-                  final   [2] AssertionValue } -- can occur at most once
-             }
+             substrings     SEQUENCE SIZE (1..MAX) OF substring SubstringValue }
+
+        SubstringValue ::= CHOICE {
+             initial [0] AssertionValue,  -- can occur at most once
+             any     [1] AssertionValue,
+             final   [2] AssertionValue } -- can occur at most once
 
         MatchingRuleAssertion ::= SEQUENCE {
              matchingRule    [1] MatchingRuleId OPTIONAL,
@@ -222,13 +223,15 @@
 
         ModifyRequest ::= [APPLICATION 6] SEQUENCE {
              object          LDAPDN,
-             changes         SEQUENCE OF change SEQUENCE {
-                  operation       ENUMERATED {
-                       add     (0),
-                       delete  (1),
-                       replace (2),
-                       ...  },
-                  modification    PartialAttribute } }
+             changes         SEQUENCE OF change ModifyRequestChange }
+
+        ModifyRequestChange ::= SEQUENCE {
+             operation       ENUMERATED {
+                  add     (0),
+                  delete  (1),
+                  replace (2),
+                  ...  },
+             modification    PartialAttribute }
 
         ModifyResponse ::= [APPLICATION 7] LDAPResult
 
