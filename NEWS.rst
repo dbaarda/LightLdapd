@@ -10,6 +10,18 @@ please ensure that this document is up to date.
 Changes in 1.0.1 (Not yet released)
 ===================================
 
+* Added `-R chroot` support.
+
+  Add support for running in a chroot with -R chroot. Add initializing of
+  syslog and basic start/stop logging to ensure logging is initialized before
+  switching into the chroot. See README.rst for details.
+
+* Made all `*.h` docstrings doxygen compatible.
+
+* Moved buffer class into its own file and add tests.
+
+  Move buffer_t class and methods into buffer.h from ldap_server.[ch] and add
+  buffer_test.c.
 
 Changes in 1.0.0 (released 2020-01-02)
 ======================================
