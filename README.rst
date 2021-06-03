@@ -121,6 +121,7 @@ Options
 -d  Run as a daemon.
 -r rootuser  Optional bind user for 'root' access to shadowAccount data.
 -u runuser  Optional user to run as after dropping root privileges.
+-R chroot  Optional path to chroot() into.
 -C crtpath  Optional path to an ssl cert to use for TLS.
 -A ca-path  Optional path to a ca-chain to use for TLS.
 -K keypath  Optional path to a private key to use for TLS.
@@ -144,6 +145,17 @@ is using nss_unix, this is often done by adding the runuser to a
 also configure nss_ldap on the client machines to bind as the rootuser
 with the ``rootbinddn`` setting so root (and only root)on the clients
 can read shadow data.
+
+Using ``-R chroot`` means lightldapd can be run in a chroot jail isolated from
+the host system with a completely different NSS/PAM setup and users. The
+chroot must include everything to configure nss and pam correctly, including
+all the required pam modules and libraries. The rootuser, runuser, and cert
+paths are all resolved and read before switching to the chroot, so must exist
+on the host system. The certs should not be in the chroot, but the rootuser
+and runuser should and must have the same userids. Logging is initialized
+before switching to the chroot so it will log to the host system and doesn't
+need anything configured in the chroot. The chroot must have permissions for
+runuser configured correctly for access to ``/etc/shadow`` as described above.
 
 To enable TLS support you specify a cert file with the ``-C`` option,
 and optionally a certificate authority chain file with the ``-A``

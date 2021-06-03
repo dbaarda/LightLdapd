@@ -9,6 +9,7 @@
 #include "ldap_server.h"
 #include "ranges.h"
 #include <unistd.h>
+#include <syslog.h>
 
 char *setting_basedn = "dc=lightldapd";
 char *setting_port = "389";
@@ -16,6 +17,7 @@ int setting_daemon = 0;
 int setting_loopback = 0;
 uid_t setting_rootuid = 0;
 uid_t setting_setuid = 0;
+char *setting_chroot = NULL;
 bool setting_anonok = 0;
 char *setting_crtpath = NULL;
 char *setting_caspath = NULL;
@@ -40,16 +42,21 @@ int main(int argc, char **argv)
         errx(EX_USAGE, "Invalid -G value: \"%s\"", setting_gids);
     if (setting_daemon && daemon(0, 0))
         fail1("daemon", 1);
+    openlog("lightldapd", LOG_PID|LOG_CONS|LOG_PERROR|LOG_NDELAY, LOG_DAEMON);
+    syslog(LOG_NOTICE, "lightldapd starting");
     if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
         fail1("mbdedtls_net_bind", 1);
     if (ldap_server_init
         (&server, loop, setting_basedn, setting_rootuid, setting_anonok, setting_crtpath, setting_caspath,
          setting_keypath, &uids, &gids))
         fail1("ldap_server_init", 1);
+    if (setting_chroot && (chroot(setting_chroot) || chdir("/")))
+        fail1("chroot", 1);
     if (setting_setuid && setuid(setting_setuid))
         fail1("setuid", 1);
     ldap_server_start(&server, socket);
     ev_run(loop, 0);
+    syslog(LOG_NOTICE, "lightldapd stopping");
     return 0;
 }
 
@@ -57,7 +64,7 @@ void settings(int argc, char **argv)
 {
     int c;
 
-    while ((c = getopt(argc, argv, "ab:dlp:r:u:C:A:K:G:U:")) != -1) {
+    while ((c = getopt(argc, argv, "ab:dlp:r:u:R:C:A:K:G:U:")) != -1) {
         switch (c) {
         case 'a':
             setting_anonok = true;
@@ -80,6 +87,9 @@ void settings(int argc, char **argv)
         case 'u':
             setting_setuid = name2uid(optarg);
             break;
+        case 'R':
+            setting_chroot = optarg;
+            break;
         case 'C':
             setting_crtpath = optarg;
             break;
@@ -97,8 +107,9 @@ void settings(int argc, char **argv)
             break;
         default:
             fprintf(stderr,
-                    "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r root] [-u user] \\\n"
-                    "  [-C crtfile] [-A ca-file] [-K keyfile] [-U 1000-29999,...] [-G 100,1000-29999,...]", argv[0]);
+                    "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r rootuser] \\\n"
+                    "  [-u runuser] [-R chroot] [-C crtfile] [-A ca-file] [-K keyfile] \\\n"
+                    "  [-U 1000-29999,...] [-G 100,1000-29999,...]", argv[0]);
             exit(1);
         }
     }
