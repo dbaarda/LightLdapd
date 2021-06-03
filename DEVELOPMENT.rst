@@ -31,7 +31,7 @@ Where the arguments provided are:
   -x  is to use simple bind.
   -D DN  is the bind DN to use.
   -W  is to prompt for passwd.
-  -ZZ is to require tls.
+  -ZZ  is to require tls.
 
 Without ``-b`` it uses the default from ``/etc/ldap/ldap.conf``.
 
