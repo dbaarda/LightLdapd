@@ -41,6 +41,16 @@ With ``-D ""`` it also does an anonymous bind.
 
 With ``-ZZ`` it will start TLS first.
 
+For testing without root against the minimal chroot use::
+
+  fakechroot -- ./lightldapd -l -p 8389 -a -R chroot -N
+
+And search with ldapsearch like this with the password "pass0001"::
+
+  ldapsearch "cn=*" -b "dc=lightldapd" -h localhost -p 8389 -v -x \
+    -D "uid=user0001,ou=people,dc=lightldapd" -W
+
+
 Using TLS
 ---------
 
