@@ -104,7 +104,7 @@ void ldap_request_bind_pam(ldap_request *request)
             resp->resultCode = BindResponse__resultCode_confidentialityRequired;
         } else if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
             resp->resultCode = BindResponse__resultCode_invalidDNSyntax;
-        } else if (PAM_SUCCESS != auth_pam(user, pw, status, &connection->delay)) {
+        } else if (PAM_SUCCESS != auth_user(user, pw, status, &connection->delay)) {
             resp->resultCode = BindResponse__resultCode_invalidCredentials;
             LDAPString_set(&resp->diagnosticMessage, status);
         } else {                /* Success! */

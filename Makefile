@@ -2,7 +2,7 @@ TARGET=lightldapd
 CC=cc
 AR=ar
 CFLAGS=-Wall -Wextra
-LDFLAGS=-lev -lpam -lmbedtls -lmbedx509 -lmbedcrypto
+LDFLAGS=-lev -lpam -lmbedtls -lmbedx509 -lmbedcrypto -lcrypt
 SRCS=main.c ldap_server.c nss2ldap.c pam.c ssl.c ranges.c
 TESTS=dlist_test ranges_test buffer_test
 CHECKS=$(TESTS:_test=_check)

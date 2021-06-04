@@ -8,6 +8,7 @@
 #include "utils.h"
 #include "ldap_server.h"
 #include "ranges.h"
+#include "pam.h"
 #include <unistd.h>
 #include <syslog.h>
 
@@ -15,6 +16,7 @@ char *setting_basedn = "dc=lightldapd";
 char *setting_port = "389";
 int setting_daemon = 0;
 int setting_loopback = 0;
+int setting_authnss = 0;
 uid_t setting_rootuid = 0;
 uid_t setting_setuid = 0;
 char *setting_chroot = NULL;
@@ -42,7 +44,7 @@ int main(int argc, char **argv)
         errx(EX_USAGE, "Invalid -G value: \"%s\"", setting_gids);
     if (setting_daemon && daemon(0, 0))
         fail1("daemon", 1);
-    openlog("lightldapd", LOG_PID|LOG_CONS|LOG_PERROR|LOG_NDELAY, LOG_DAEMON);
+    openlog("lightldapd", LOG_PID | LOG_CONS | LOG_PERROR | LOG_NDELAY, LOG_DAEMON);
     syslog(LOG_NOTICE, "lightldapd starting");
     if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
         fail1("mbdedtls_net_bind", 1);
@@ -54,6 +56,8 @@ int main(int argc, char **argv)
         fail1("chroot", 1);
     if (setting_setuid && setuid(setting_setuid))
         fail1("setuid", 1);
+    if (setting_authnss)
+        auth_user = auth_nss;
     ldap_server_start(&server, socket);
     ev_run(loop, 0);
     syslog(LOG_NOTICE, "lightldapd stopping");
@@ -64,7 +68,7 @@ void settings(int argc, char **argv)
 {
     int c;
 
-    while ((c = getopt(argc, argv, "ab:dlp:r:u:R:C:A:K:G:U:")) != -1) {
+    while ((c = getopt(argc, argv, "ab:dlp:r:u:R:C:A:K:G:U:N")) != -1) {
         switch (c) {
         case 'a':
             setting_anonok = true;
@@ -105,11 +109,14 @@ void settings(int argc, char **argv)
         case 'U':
             setting_uids = optarg;
             break;
+        case 'N':
+            setting_authnss = 1;
+            break;
         default:
             fprintf(stderr,
                     "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r rootuser] \\\n"
                     "  [-u runuser] [-R chroot] [-C crtfile] [-A ca-file] [-K keyfile] \\\n"
-                    "  [-U 1000-29999,...] [-G 100,1000-29999,...]", argv[0]);
+                    "  [-U 1000-29999,...] [-G 100,1000-29999,...] [-N]", argv[0]);
             exit(1);
         }
     }

@@ -6,6 +6,10 @@
 
 #include "pam.h"
 #include "utils.h"
+#include <shadow.h>
+#include <crypt.h>
+
+auth_func_t *auth_user = auth_pam;
 
 typedef struct {
     const char *user, *pw;
@@ -79,4 +83,17 @@ static void auth_pam_delay(int retval, unsigned usec_delay, void *appdata_ptr)
     /* Only set the delay if the auth failed. */
     if (PAM_SUCCESS != retval)
         data->delay = usec_delay * 1.0e-6;
+}
+
+int auth_nss(const char *user, const char *pw, char *msg, double *delay)
+{
+    struct spwd *sp;
+
+    if (!(sp = getspnam(user)) || strcmp(sp->sp_pwdp, crypt(pw, sp->sp_pwdp))) {
+        snprintf(msg, PAMMSG_LEN, "PAM: user %s - not authenticated: Auth failed.\n", user);
+        *delay = 3.0;
+        return PAM_AUTH_ERR;
+    }
+    *delay = 0.0;
+    return PAM_SUCCESS;
 }
