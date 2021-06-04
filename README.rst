@@ -8,21 +8,24 @@ is designed to provide network wide users/groups/etc support to
 supplement the excellent network dns/dhcp/tftp support provided by
 dnsmasq.
 
-It uses local PAM and NSS for authentication and to export the local
-passwd/group/shadow/etc system databases. This means it has no special
-separate ldap database to manage, and users/groups/etc can be managed
-normally on the LightLdapd machine. No database setup or ldap
-management tools are required, it just exports all the local
-users/groups/etc. Client machines can then use libpam_ldapd and
-libnss_ldapd to have all the same users/groups/etc as are on the
-machine where LightLdapd is running.
+It uses local PAM and NSS for authentication to export the local
+passwd/group/shadow/etc system databases. This means it requires no special
+separate ldap database to manage, and users/groups/etc can be managed normally
+on the LightLdapd server machine. No special database setup or ldap management
+tools are required, it just exports all the local users/groups/etc. Client
+machines can then use libpam_ldapd and libnss_ldapd to have all the same
+users/groups/etc as are on the machine where LightLdapd is running.
 
-The code is small, clean and efficient C, leveraging of existing
-libraries as much as possible. It uses libev for an efficient event
-loop. It uses asn1c to auto-generate the LDAP message
-parsing/generating from the ASN.1 spec. It uses libpam for
-authentication. It uses mbedtls for TLS support. It is small and
-efficient enough to run on a router or NAS.
+It can also run inside a minimal chroot environment, giving more isolation
+from the host system, and explorting a completely different set of
+users/groups possibly using a completely different PAM/NSS setup from inside
+the chroot.
+
+The code is small, clean and efficient C, leveraging of existing libraries as
+much as possible. It uses libev for an efficient event loop. It uses asn1c to
+auto-generate the LDAP message parsing/generating from the ASN.1 spec. It uses
+libpam or crypt for authentication. It uses mbedtls for TLS support. It is
+small and efficient enough to run on a router or NAS.
 
 LightLdapd was forked from the excellent entente by Sergey Urbanovich
 with his blessing. The choice to fork was made in order to leave
@@ -38,9 +41,9 @@ pam_ldap authentication and/or nss_ldap access to passwd, group, and
 shadow data. It now has TLS support so it should be safe to use on
 untrusted networks.
 
-The TLS support is new but fairly complete. If TLS is enabled it will
-require it be started for bind operations. This should prevent clients
-from accidentally using it insecurely on an untrusted network.
+The TLS support is relatively new but complete. If TLS is enabled it will
+require it be started for bind operations. This should prevent clients from
+accidentally using it insecurely on an untrusted network.
 
 It does not yet have any logging, which can make it hard to figure out
 what is wrong when something is not working.
@@ -64,8 +67,9 @@ Name                 Description
 `<LICENSE>`_         Copyright and Licencing details.
 `<NEWS.rst>`_        Summary of fixes and changes for each release.
 `<TODO.rst>`_        List of outstanding tasks and future plans.
-`ldap.asn1`          The asn1 ldap protocol specification.
+`<ldap.asn1>`_       The asn1 ldap protocol specification.
 `*.[ch]`             The project source code.
+`<chroot/>`_         Minimal chroot for testing.
 ==================== ======================================================
 
 .. It wouldn't hurt to have a few paragraphs here suggesting were to
@@ -78,11 +82,10 @@ Install
 Dependencies
 ------------
 
-* `asn1c <https://github.com/vlm/asn1c>`_
-* `libev <http://software.schmorp.de/pkg/libev.html>`_
-* `libpam <http://www.kernel.org/pub/linux/libs/pam/>`_
-* `mbedtls <https://tls.mbed.org/>`_
-
+* `asn1c <https://github.com/vlm/asn1c>`_ - `apt-get install asn1c`
+* `libev <http://software.schmorp.de/pkg/libev.html>`_ - `apt-get install libev-dev`
+* `libpam <http://www.kernel.org/pub/linux/libs/pam/>`_ - `apt-get install libpam-dev`
+* `mbedtls <https://tls.mbed.org/>`_ - `apt-get install libmbedtls-dev`
 
 Build
 -----
@@ -153,10 +156,11 @@ chroot must include everything to configure NSS and PAM correctly, including
 all the required PAM modules and libraries. The rootuser, runuser, and cert
 paths are all resolved and read before switching to the chroot, so must exist
 on the host system. The certs should not be in the chroot, but the rootuser
-and runuser should and must have the same userids. Logging is initialized
-before switching to the chroot so it will log to the host system and doesn't
-need anything configured in the chroot. The chroot must have permissions for
-runuser configured correctly for access to ``/etc/shadow`` as described above.
+and runuser should and must have the same userids. Logging with syslog is
+initialized before switching to the chroot so it will log to the host system
+and doesn't need anything configured in the chroot. The chroot must have
+permissions for runuser configured correctly for access to ``/etc/shadow`` if
+required as described above.
 
 Using ``-N`` means authentication is done using NSS and crypt against the the
 shadow passwords instead of using PAM. This requires that the runuser have
@@ -164,17 +168,15 @@ read access to NSS shadow data. This is particularly useful for running in a
 chroot, as it means the chroot doesn't need any pam modules installed, and
 only requires a minimal nss setup.
 
-To enable TLS support you specify a cert file with the ``-C`` option,
-and optionally a certificate authority chain file with the ``-A``
-argument and/or a separate private key file with the ``-K`` argument.
-If you don't use the ``-K`` option, the cert file must be a ``*.pem``
-file containing both the cert and private key. The file contining the
-private key must be readable by the user lightldapd is started as, but
-doesn't have to be readable by the ``-u runuser`` user. Typically it
-is set readable only by root. It is important to configure your
-clients to use TLS and trust the cert used. If you are using
-self-signed certs this typically means giving them a copy of the
-public cert.
+To enable TLS support you specify a cert file with the ``-C`` option, and
+optionally a certificate authority chain file with the ``-A`` argument and/or
+a separate private key file with the ``-K`` argument. If you don't use the
+``-K`` option, the cert file must be a ``*.pem`` file containing both the cert
+and private key. The file contining the private key must be readable by the
+user lightldapd is started as, but doesn't have to be readable by the ``-u
+runuser`` user. Typically it is set readable only by root. It is important to
+configure your clients to use TLS and trust the cert used. If you are using
+self-signed certs this typically means giving them a copy of the public cert.
 
 To only expose a subset of your local uids or gids over ldap, use the `-U` and
 `-G` options, setting them to a comma-separated list of ids or id-ranges to
