@@ -17,13 +17,15 @@ void delay_cb(EV_P_ ev_timer *w, int revents);
 void handshake_cb(ev_loop *loop, ev_io *watcher, int revents);
 void goodbye_cb(ev_loop *loop, ev_io *watcher, int revents);
 
-int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const uid_t rootuid, const bool anonok,
+int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const char *rootuser, const bool anonok,
                      const char *crtpath, const char *caspath, const char *keypath, const ldap_ranges *uids,
                      const ldap_ranges *gids)
 {
     mbedtls_net_init(&server->socket);
     server->basedn = basedn;
-    server->rootuid = rootuid;
+    server->rootuser = rootuser;
+    /* We set rootuid from rootuser later in ldap_server_start(). */
+    server->rootuid = 0;
     server->anonok = anonok;
     server->uids = uids;
     server->gids = gids;
@@ -40,6 +42,8 @@ void ldap_server_start(ldap_server *server, mbedtls_net_context socket)
 {
     assert(!ev_is_active(&server->connection_watcher));
 
+    /* We set rootuid here so it is resolved inside any chroot. */
+    server->rootuid = name2uid(server->rootuser);
     server->socket = socket;
     ev_io_set(&server->connection_watcher, socket.fd, EV_READ);
     ev_io_start(server->loop, &server->connection_watcher);

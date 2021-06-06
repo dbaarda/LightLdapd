@@ -24,6 +24,7 @@ typedef struct ldap_reply ldap_reply;
 typedef struct {
     mbedtls_net_context socket; /**< The mbedtls server socket used. */
     const char *basedn;         /**< The ldap basedn to use. */
+    const char *rootuser;       /**< The name of admin "root" user. */
     uid_t rootuid;              /**< The uid of admin "root" user. */
     bool anonok;                /**< If anonymous bind is allowed. */
     const ldap_ranges *uids;    /**< The ranges of uids exported. */
@@ -32,7 +33,7 @@ typedef struct {
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
     mbedtls_ssl_server *ssl;    /**< The mbedtls ssl server config. */
 } ldap_server;
-int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const uid_t rootuid, const bool anonok,
+int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const char *rootuser, const bool anonok,
                      const char *crtpath, const char *caspath, const char *keypath, const ldap_ranges *uids,
                      const ldap_ranges *gids);
 void ldap_server_start(ldap_server *server, mbedtls_net_context socket);

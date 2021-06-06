@@ -119,13 +119,12 @@ Options
 
 -a  Allow anonymous access.
 -b basedn  Set the basedn for the ldap server (default: "dc=lightldapd").
+-r rootuser  Bind user for 'root' access to shadow data (default: "root").
 -l  Bind to the loopback interface only.
 -p port  Set local port number (default: 389).
 -d  Run as a daemon.
--r rootuser  Optional bind user for 'root' access to shadowAccount data.
 -u runuser  Optional user to run as after dropping root privileges.
 -R chroot  Optional path to chroot() into.
--N  Use NSS and crypt for authenticating instead of PAM.
 -C crtpath  Optional path to an ssl cert to use for TLS.
 -A ca-path  Optional path to a ca-chain to use for TLS.
 -K keypath  Optional path to a private key to use for TLS.
@@ -133,6 +132,7 @@ Options
   (default: "1000-29999").
 -G gids  Optional comma-separated list of gids or gid-ranges to export
   (default: "100,1000-29999").
+-N  Use NSS and crypt for authenticating instead of PAM.
 
 Note lightldapd must run as root to open the default ldap serving
 port, but using ``-u runuser`` it will use setuid() to drop root
@@ -150,23 +150,24 @@ also configure nss_ldap on the client machines to bind as the rootuser
 with the ``rootbinddn`` setting so root (and only root)on the clients
 can read shadow data.
 
-Using ``-R chroot`` means lightldapd can be run in a chroot jail isolated from
-the host system with a completely different NSS/PAM setup and users. The
-chroot must include everything to configure NSS and PAM correctly, including
-all the required PAM modules and libraries. The rootuser, runuser, and cert
-paths are all resolved and read before switching to the chroot, so must exist
-on the host system. The certs should not be in the chroot, but the rootuser
-and runuser should and must have the same userids. Logging with syslog is
-initialized before switching to the chroot so it will log to the host system
-and doesn't need anything configured in the chroot. The chroot must have
-permissions for runuser configured correctly for access to ``/etc/shadow`` if
-required as described above.
+Using ``-R chroot`` means lightldapd can be run in a chroot isolated from the
+host system with a completely different NSS/PAM setup and users. The chroot
+must include everything to configure NSS and PAM correctly, including all the
+required PAM modules and libraries. The runuser, and cert paths are resolved
+and read before switching to the chroot, so must exist on the host system.
+Logging with syslog is initialized before switching to the chroot so it will
+log to the host system and doesn't need anything configured in the chroot. The
+runuser should also exist in the chroot with the same uid, and must have
+permissions configured correctly for access to shadow data. The rootuser is
+resolved after switching to the chroot, so only needs to exist in the chroot
+environment.
 
 Using ``-N`` means authentication is done using NSS and crypt against the the
 shadow passwords instead of using PAM. This requires that the runuser have
 read access to NSS shadow data. This is particularly useful for running in a
 chroot, as it means the chroot doesn't need any pam modules installed, and
-only requires a minimal nss setup.
+only requires a minimal nss setup with resolv.conf and passwd/group/shadow
+files.
 
 To enable TLS support you specify a cert file with the ``-C`` option, and
 optionally a certificate authority chain file with the ``-A`` argument and/or
@@ -183,7 +184,11 @@ To only expose a subset of your local uids or gids over ldap, use the `-U` and
 include. The defaults are `-U 1000-29999` and `-G 100,1000-29999`. This
 ensures that system users and groups are not exported, as clients typically
 define their own system users and groups in their own /etc/passwd and
-/etc/group configs.
+/etc/group configs. Note that authentication for bind is done against the host
+(or chroot) system's users and is not limited to the `-U` exported uid ranges.
+This means it is possible to bind as a user not exported by the LDAP server.
+This means you can make the rootuser a special system user (uid < 1000) while
+only exporting normal users (uid >= 1000).
 
 Example usage with lighttpd
 ---------------------------

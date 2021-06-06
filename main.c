@@ -12,14 +12,14 @@
 #include <unistd.h>
 #include <syslog.h>
 
-char *setting_basedn = "dc=lightldapd";
 char *setting_port = "389";
-int setting_daemon = 0;
-int setting_loopback = 0;
-int setting_authnss = 0;
-uid_t setting_rootuid = 0;
+bool setting_loopback = 0;
+bool setting_authnss = 0;
+bool setting_daemon = 0;
 uid_t setting_setuid = 0;
 char *setting_chroot = NULL;
+char *setting_basedn = "dc=lightldapd";
+char *setting_rootuser = "root";
 bool setting_anonok = 0;
 char *setting_crtpath = NULL;
 char *setting_caspath = NULL;
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
         fail1("mbdedtls_net_bind", 1);
     if (ldap_server_init
-        (&server, loop, setting_basedn, setting_rootuid, setting_anonok, setting_crtpath, setting_caspath,
+        (&server, loop, setting_basedn, setting_rootuser, setting_anonok, setting_crtpath, setting_caspath,
          setting_keypath, &uids, &gids))
         fail1("ldap_server_init", 1);
     if (setting_chroot && (chroot(setting_chroot) || chdir("/")))
@@ -68,7 +68,7 @@ void settings(int argc, char **argv)
 {
     int c;
 
-    while ((c = getopt(argc, argv, "ab:dlp:r:u:R:C:A:K:G:U:N")) != -1) {
+    while ((c = getopt(argc, argv, "ab:dlp:r:u:A:C:G:K:NR:U:")) != -1) {
         switch (c) {
         case 'a':
             setting_anonok = true;
@@ -86,35 +86,35 @@ void settings(int argc, char **argv)
             setting_port = optarg;
             break;
         case 'r':
-            setting_rootuid = name2uid(optarg);
+            setting_rootuser = optarg;
             break;
         case 'u':
             setting_setuid = name2uid(optarg);
             break;
-        case 'R':
-            setting_chroot = optarg;
+        case 'A':
+            setting_caspath = optarg;
             break;
         case 'C':
             setting_crtpath = optarg;
             break;
-        case 'A':
-            setting_caspath = optarg;
+        case 'G':
+            setting_gids = optarg;
             break;
         case 'K':
             setting_keypath = optarg;
             break;
-        case 'G':
-            setting_gids = optarg;
+        case 'N':
+            setting_authnss = 1;
+            break;
+        case 'R':
+            setting_chroot = optarg;
             break;
         case 'U':
             setting_uids = optarg;
             break;
-        case 'N':
-            setting_authnss = 1;
-            break;
         default:
             fprintf(stderr,
-                    "Usage: %s [-a] [-b dc=lightldapd] [-l] [-p 389] [-d] [-r rootuser] \\\n"
+                    "Usage: %s [-a] [-b dc=lightldapd] [-r rootuser] [-l] [-p 389] [-d] \\\n"
                     "  [-u runuser] [-R chroot] [-C crtfile] [-A ca-file] [-K keyfile] \\\n"
                     "  [-U 1000-29999,...] [-G 100,1000-29999,...] [-N]", argv[0]);
             exit(1);
