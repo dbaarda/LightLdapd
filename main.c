@@ -9,6 +9,7 @@
 #include "ldap_server.h"
 #include "ranges.h"
 #include "pam.h"
+#include "log.h"
 #include <unistd.h>
 #include <syslog.h>
 
@@ -16,7 +17,7 @@ char *setting_port = "389";
 bool setting_loopback = 0;
 bool setting_authnss = 0;
 bool setting_daemon = 0;
-uid_t setting_setuid = 0;
+char *setting_runuser = "root";
 char *setting_chroot = NULL;
 char *setting_basedn = "dc=lightldapd";
 char *setting_rootuser = "root";
@@ -34,33 +35,37 @@ int main(int argc, char **argv)
     mbedtls_net_context socket;
     ldap_server server;
     char *server_addr;
+    uid_t runuid;
     ldap_ranges uids, gids;
 
     settings(argc, argv);
+    linit("lightldapd");
+    lnote("lightldapd starting");
     server_addr = setting_loopback ? "127.0.0.1" : NULL;
+    runuid = name2uid(setting_runuser);
     if (!ldap_ranges_init(&uids, setting_uids))
-        errx(EX_USAGE, "Invalid -U value: \"%s\"", setting_uids);
+        lerrx(EX_USAGE, "Invalid -U value: \"%s\"", setting_uids);
     if (!ldap_ranges_init(&gids, setting_gids))
-        errx(EX_USAGE, "Invalid -G value: \"%s\"", setting_gids);
-    if (setting_daemon && daemon(0, 0))
-        fail1("daemon", 1);
-    openlog("lightldapd", LOG_PID | LOG_CONS | LOG_PERROR | LOG_NDELAY, LOG_DAEMON);
-    syslog(LOG_NOTICE, "lightldapd starting");
-    if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
-        fail1("mbdedtls_net_bind", 1);
+        lerrx(EX_USAGE, "Invalid -G value: \"%s\"", setting_gids);
     if (ldap_server_init
         (&server, loop, setting_basedn, setting_rootuser, setting_anonok, setting_crtpath, setting_caspath,
          setting_keypath, &uids, &gids))
-        fail1("ldap_server_init", 1);
-    if (setting_chroot && (chroot(setting_chroot) || chdir("/")))
-        fail1("chroot", 1);
-    if (setting_setuid && setuid(setting_setuid))
-        fail1("setuid", 1);
+        lerr(1, "ldap_server_init() failed");
+    if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
+        lerr(1, "mbdedtls_net_bind() failed");
+    if (setting_daemon && daemon(1, 0))
+        lerr(1, "daemon() failed");
+    if (setting_chroot && chroot(setting_chroot))
+        lerr(1, "chroot() failed");
+    if (chdir("/"))
+        lerr(1, "chdir() failed");
+    if (runuid && setuid(runuid))
+        lerr(1, "setuid() failed");
     if (setting_authnss)
         auth_user = auth_nss;
     ldap_server_start(&server, socket);
     ev_run(loop, 0);
-    syslog(LOG_NOTICE, "lightldapd stopping");
+    lnote("lightldapd stopping");
     return 0;
 }
 
@@ -77,10 +82,10 @@ void settings(int argc, char **argv)
             setting_basedn = optarg;
             break;
         case 'd':
-            setting_daemon = 1;
+            setting_daemon = true;
             break;
         case 'l':
-            setting_loopback = 1;
+            setting_loopback = true;
             break;
         case 'p':
             setting_port = optarg;
@@ -89,7 +94,7 @@ void settings(int argc, char **argv)
             setting_rootuser = optarg;
             break;
         case 'u':
-            setting_setuid = name2uid(optarg);
+            setting_runuser = optarg;
             break;
         case 'A':
             setting_caspath = optarg;
@@ -104,7 +109,7 @@ void settings(int argc, char **argv)
             setting_keypath = optarg;
             break;
         case 'N':
-            setting_authnss = 1;
+            setting_authnss = true;
             break;
         case 'R':
             setting_chroot = optarg;
@@ -117,7 +122,7 @@ void settings(int argc, char **argv)
                     "Usage: %s [-a] [-b dc=lightldapd] [-r rootuser] [-l] [-p 389] [-d] \\\n"
                     "  [-u runuser] [-R chroot] [-C crtfile] [-A ca-file] [-K keyfile] \\\n"
                     "  [-U 1000-29999,...] [-G 100,1000-29999,...] [-N]", argv[0]);
-            exit(1);
+            exit(EX_USAGE);
         }
     }
 }

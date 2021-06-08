@@ -6,6 +6,7 @@
  *
  * \licence Licensed under the GPLv3 License. See LICENSE file for details. */
 
+#include "log.h"
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/x509.h>
@@ -13,7 +14,7 @@
 #include <mbedtls/net_sockets.h>
 #include <mbedtls/error.h>
 
-#define mbedtls_fail1(msg, err, ret) do {char _s[256]; mbedtls_strerror(err, _s, 256); warnx("%s: %s", msg, _s); return ret; } while (0);
+#define mbedtls_fail1(msg, err, ret) do {char _s[256]; mbedtls_strerror(err, _s, 256); lwarnx("%s: %s", msg, _s); return ret; } while (0);
 #define mbedtls_fail(msg, err) mbedtls_fail1(msg, err, );
 
 typedef struct {
