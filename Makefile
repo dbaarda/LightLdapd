@@ -9,6 +9,7 @@ CHECKS=$(TESTS:_test=_check)
 
 .PHONY: all debug clean install debian debclean tidy check
 
+all: CFLAGS += -Wno-unused-parameter -DNDEBUG
 all: $(TARGET)
 
 $(TARGET): $(SRCS) asn1/LDAP.a
@@ -22,7 +23,7 @@ asn1:
 	mkdir asn1 && ( cd asn1; asn1c -pdu=auto -fcompound-names ../ldap.asn1; rm converter-sample.c )
 
 debug: CFLAGS += -DDEBUG
-debug: all
+debug: ${TARGET}
 
 clean:
 	rm -rf $(TARGET) $(TESTS) asn1/ *~
