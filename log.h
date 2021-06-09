@@ -39,18 +39,17 @@ void log_init(const char *name, bool daemon, int level);
 void errlog(int level, const char *msg, ...)
     __attribute__((__format__(printf, 2, 3)));
 
-#define _logx(l, f, ...) log_func(l, "%s:%u %s: "f, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
-#define _log(l, f, ...) _logx(l, f": %s", ##__VA_ARGS__, strerror(errno))
+#define _log(l, f, ...) log_func(l, "%s:%u %s: "f, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 
-#define lerr(e, f, ...) do { _log(LOG_ERR, "Error: "f, ##__VA_ARGS__); exit(e); } while (0)
-#define lerrx(e, f, ...) do { _logx(LOG_ERR, "Error: "f, ##__VA_ARGS__); exit(e); } while (0)
-#define lwarn(f, ...) _log(LOG_WARNING, "Warning: "f, ##__VA_ARGS__)
-#define lwarnx(f, ...) _logx(LOG_WARNING, "Warning: "f, ##__VA_ARGS__)
-#define lnote(f, ...) _logx(LOG_NOTICE, "Note: "f, ##__VA_ARGS__)
-#define linfo(f, ...) _logx(LOG_INFO, "Info: "f, ##__VA_ARGS__)
+#define lerr(e, f, ...) do { _log(LOG_ERR, "Error: "f": %s", ##__VA_ARGS__, strerror(errno)); exit(e); } while (0)
+#define lerrx(e, f, ...) do { _log(LOG_ERR, "Error: "f, ##__VA_ARGS__); exit(e); } while (0)
+#define lwarn(f, ...) _log(LOG_WARNING, "Warning: "f": %s", ##__VA_ARGS__, strerror(errno))
+#define lwarnx(f, ...) _log(LOG_WARNING, "Warning: "f, ##__VA_ARGS__)
+#define lnote(f, ...) _log(LOG_NOTICE, "Note: "f, ##__VA_ARGS__)
+#define linfo(f, ...) _log(LOG_INFO, "Info: "f, ##__VA_ARGS__)
 
 #ifdef DEBUG
-#define ldebug(f, ...) _logx("Debug: "f, ##__VA_ARGS__)
+#define ldebug(f, ...) _log("Debug: "f, ##__VA_ARGS__)
 #else
 #define ldebug(f, ...)
 #endif
