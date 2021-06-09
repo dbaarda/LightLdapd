@@ -39,7 +39,7 @@ int main(int argc, char **argv)
     ldap_ranges uids, gids;
 
     settings(argc, argv);
-    linit("lightldapd");
+    log_init("lightldapd", setting_daemon, LOG_DEBUG);
     lnote("lightldapd starting");
     server_addr = setting_loopback ? "127.0.0.1" : NULL;
     runuid = name2uid(setting_runuser);
