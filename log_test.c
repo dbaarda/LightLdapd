@@ -31,7 +31,7 @@ int main(void)
     assert(log_prefix == log_prefix_color);
     ldebug("something interesting");
     linfo("something boring");
-    lnote("somthing important");
+    lnote("something important");
     lwarn("something concerning");
     lwarnx("something concerning");
     /* Test syslog behavior */
@@ -41,7 +41,7 @@ int main(void)
     assert(log_prefix == log_prefix_plain);
     ldebug("something interesting");
     linfo("something boring");
-    lnote("somthing important");
+    lnote("something important");
     lwarn("something concerning");
     lwarnx("something concerning");
     /* Test errlog behaviour */
@@ -51,7 +51,7 @@ int main(void)
     assert(log_prefix == log_prefix_color);
     ldebug("something interesting");
     linfo("something boring");
-    lnote("somthing important");
+    lnote("something important");
     lwarn("something concerning");
     lwarnx("something concerning");
     lerr(0, "something scary");
