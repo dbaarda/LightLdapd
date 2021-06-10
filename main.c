@@ -40,7 +40,7 @@ int main(int argc, char **argv)
 
     settings(argc, argv);
     log_init("lightldapd", setting_daemon, LOG_DEBUG);
-    lnote("lightldapd starting");
+    lwarnx("lightldapd starting");
     server_addr = setting_loopback ? "127.0.0.1" : NULL;
     runuid = name2uid(setting_runuser);
     if (!ldap_ranges_init(&uids, setting_uids))
@@ -65,7 +65,7 @@ int main(int argc, char **argv)
         auth_user = auth_nss;
     ldap_server_start(&server, socket);
     ev_run(loop, 0);
-    lnote("lightldapd stopping");
+    lwarnx("lightldapd stopping");
     return 0;
 }
 

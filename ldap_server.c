@@ -17,6 +17,12 @@ void delay_cb(EV_P_ ev_timer *w, int revents);
 void handshake_cb(ev_loop *loop, ev_io *watcher, int revents);
 void goodbye_cb(ev_loop *loop, ev_io *watcher, int revents);
 
+const char *LDAPMessageName(LDAPMessage_t *msg)
+{
+    /* TODO: this is pretty terrible. */
+    return asn_DEF_LDAPMessage.elements[1].type->elements[msg->protocolOp.present - 1].name;
+}
+
 int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const char *rootuser, const bool anonok,
                      const char *crtpath, const char *caspath, const char *keypath, const ldap_ranges *uids,
                      const ldap_ranges *gids)
@@ -57,12 +63,14 @@ void ldap_server_stop(ldap_server *server)
     mbedtls_net_free(&server->socket);
 }
 
-ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket)
+ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket, const char *ip)
 {
     ldap_connection *connection = XNEW0(ldap_connection, 1);
 
+    lnote("connection %p from %s", connection, ip);
     connection->server = server;
     connection->socket = socket;
+    strcpy(connection->client_ip, ip);
     connection->binduid = (uid_t)(-1);
     ev_io_init(&connection->read_watcher, read_cb, socket.fd, EV_READ);
     connection->read_watcher.data = connection;
@@ -82,6 +90,7 @@ ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context so
 
 void ldap_connection_free(ldap_connection *connection)
 {
+    lnote("disconnect %p from %s", connection, connection->client_ip);
     ev_io_stop(connection->server->loop, &connection->read_watcher);
     ev_io_stop(connection->server->loop, &connection->write_watcher);
     ev_timer_stop(connection->server->loop, &connection->delay_watcher);
@@ -124,20 +133,29 @@ void ldap_connection_respond(ldap_connection *connection)
         case LDAPMessage__protocolOp_PR_extendedReq:
             ldap_request_extended(connection, *msg);
             break;
+        case LDAPMessage__protocolOp_PR_unbindRequest:
+            /* For unbindRequest, close the connection. */
+            linfo("unbind request %ld on connection %p", (*msg)->messageID, connection);
+            return ldap_connection_close(connection);
         default:
-            /* For unknown or unbindRequest, close the connection. */
+            /* For unknown, close the connection. */
+            lwarn("unknown request %ld on connection %p", (*msg)->messageID, connection);
             return ldap_connection_close(connection);
         }
         *msg = NULL;
     }
     /* If we got an error recieving messages, close the connection. */
-    if (status == RC_FAIL)
+    if (status == RC_FAIL) {
+        lwarn("failure recieving message on connection %p", connection);
         return ldap_connection_close(connection);
+    }
     /* While there's a request and we are not blocked, respond to the request. */
     while (connection->request && (status = ldap_request_respond(connection->request)) == RC_OK) ;
     /* If we got an error sending messages, close the connection. */
-    if (status == RC_FAIL)
+    if (status == RC_FAIL) {
+        lwarn("failure sending message on connection %p", connection);
         return ldap_connection_close(connection);
+    }
     /* Update the state of all the connection watchers. */
     if (connection->delay && !ev_is_active(&connection->delay_watcher)) {
         ev_timer_set(&connection->delay_watcher, connection->delay, 0.0);
@@ -193,19 +211,26 @@ void accept_cb(ev_loop *loop, ev_io *watcher, int revents)
 {
     ldap_server *server = watcher->data;
     mbedtls_net_context socket;
+    char addr[16];
+    size_t len;
+    char ip[INET6_ADDRSTRLEN];
     assert(server->loop == loop);
     assert(&server->connection_watcher == watcher);
 
     if (EV_ERROR & revents)
         fail("got invalid event");
-    if (mbedtls_net_accept(&server->socket, &socket, NULL, 0, NULL))
+    if (mbedtls_net_accept(&server->socket, &socket, addr, sizeof(addr), &len))
         fail("mbedtls_net_accept error");
     /* Set nonblock mode so mbedtls_ssl_handshake() is non-blocking. */
     if (mbedtls_net_set_nonblock(&socket)) {
         mbedtls_net_free(&socket);
         fail("mbedtls_net_set_nonblock");
     }
-    ldap_connection_new(server, socket);
+    if (!inet_ntop(len == 4 ? AF_INET : AF_INET6, addr, ip, sizeof(ip))) {
+        lwarn("inet_ntop() failed to format client address");
+        strcpy(ip, "<unknown>");
+    }
+    ldap_connection_new(server, socket, ip);
 }
 
 void read_cb(ev_loop *loop, ev_io *watcher, int revents)
@@ -339,6 +364,7 @@ void ldap_request_free(ldap_request *request)
     if (request) {
         /* Remove the request from the connection's circular dlist. */
         ldap_connection *connection = request->connection;
+        linfo("completed request %ld on connection %p", request->message->messageID, connection);
         ldap_request_rem(&connection->request, request);
         LDAPMessage_free(request->message);
         while (request->reply)
@@ -353,6 +379,7 @@ ldap_request *ldap_request_bind(ldap_connection *connection, LDAPMessage_t *msg)
     assert(msg->protocolOp.present == LDAPMessage__protocolOp_PR_bindRequest);
     ldap_request *request = ldap_request_new(connection, msg);
 
+    linfo("bind request %ld on connection %p", msg->messageID, connection);
     ldap_request_bind_pam(request);
     return request;
 }
@@ -363,6 +390,7 @@ ldap_request *ldap_request_search(ldap_connection *connection, LDAPMessage_t *ms
     assert(msg->protocolOp.present == LDAPMessage__protocolOp_PR_searchRequest);
     ldap_request *request = ldap_request_new(connection, msg);
 
+    linfo("search request %ld on connection %p", msg->messageID, connection);
     ldap_request_search_nss(request);
     return request;
 }
@@ -382,6 +410,7 @@ ldap_request *ldap_request_extended(ldap_connection *connection, LDAPMessage_t *
     reply->message.protocolOp.present = LDAPMessage__protocolOp_PR_extendedResp;
     LDAPString_set(&res->matchedDN, server->basedn);
     if (!strcmp((char *)req->requestName.buf, LDAPOID_StartTLS)) {
+        linfo("startTLS extended request %ld on connection %p", msg->messageID, connection);
         res->responseName = LDAPString_new(LDAPOID_StartTLS);
         if (server->ssl) {
             res->resultCode = ExtendedResponse__resultCode_success;
@@ -394,6 +423,7 @@ ldap_request *ldap_request_extended(ldap_connection *connection, LDAPMessage_t *
             LDAPString_set(&res->diagnosticMessage, "TLS not enabled.");
         }
     } else {
+        linfo("unknown extended request %ld on connection %p", msg->messageID, connection);
         res->resultCode = ExtendedResponse__resultCode_protocolError;
         LDAPString_set(&res->diagnosticMessage, "Unknown extended operation.");
     }
@@ -407,8 +437,9 @@ void ldap_request_abandon(ldap_connection *connection, LDAPMessage_t *msg)
     assert(msg);
     ldap_request *l = connection->request;
     ldap_request *e;
-    int msgid = msg->messageID;
+    MessageID_t msgid = msg->messageID;
 
+    linfo("abandon request %ld on connection %p", msgid, connection);
     /* Consume the message like we do for other request types. */
     LDAPMessage_free(msg);
     for (e = l; e; e = ldap_request_next(&l, e))
@@ -460,10 +491,15 @@ void ldap_reply_free(ldap_reply *reply)
 ldap_status_t ldap_reply_respond(ldap_reply *reply)
 {
     assert(reply);
-    ldap_status_t status = ldap_connection_send(reply->request->connection, &reply->message);
+    ldap_request *request = reply->request;
+    ldap_connection *connection = request->connection;
+    ldap_status_t status = ldap_connection_send(connection, &reply->message);
 
     /* If the message was sent, we are done. */
-    if (status == RC_OK)
+    if (status == RC_OK) {
+        ldebug("reply %s sent for request %ld on connection %p", LDAPMessageName(&reply->message),
+               request->message->messageID, connection);
         ldap_reply_free(reply);
+    }
     return status;
 }

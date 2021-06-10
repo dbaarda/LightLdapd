@@ -15,6 +15,7 @@
 #include "asn1/LDAPMessage.h"
 #define EV_COMPAT3 0            /* Use the ev 4.X API. */
 #include <ev.h>
+#include <arpa/inet.h>
 
 /* Pre-declare types needed for forward referencing. */
 typedef struct ldap_request ldap_request;
@@ -46,6 +47,7 @@ typedef enum asn_dec_rval_code_e ldap_status_t;
 typedef struct {
     ldap_server *server;        /**< The server for this connection. */
     mbedtls_net_context socket; /**< The mbedtls client socket used. */
+    char client_ip[INET6_ADDRSTRLEN];   /**< The client ip address. */
     uid_t binduid;              /**< The uid the client binded to. */
     ev_io read_watcher;         /**< The libev data read watcher. */
     ev_io write_watcher;        /**< The libev data write watcher. */
@@ -57,7 +59,7 @@ typedef struct {
     buffer_t send_buf;          /**< The buffer for outgoing data. */
     mbedtls_ssl_context *ssl;   /**< The mbedtls ssl context. */
 } ldap_connection;
-ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket);
+ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket, const char *ip);
 void ldap_connection_free(ldap_connection *connection);
 void ldap_connection_close(ldap_connection *connection);
 void ldap_connection_respond(ldap_connection *connection);
