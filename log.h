@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <string.h>
 #include <syslog.h>
+#include <stdlib.h>
 #include <stdbool.h>
 
 /** Logging function type. */
