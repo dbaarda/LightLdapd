@@ -4,6 +4,7 @@
  * Licensed under the GPLv3 License. See LICENSE file for details.
  */
 #include "log.h"
+#include <assert.h>
 #include <err.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -40,6 +41,7 @@ const char *levelcolor[8] = {
 
 void log_init(const char *name, bool daemon, int level)
 {
+    assert(level >= LOG_EMERG && level <= LOG_DEBUG);
     if (daemon) {
         openlog(name, LOG_PID | LOG_NDELAY, LOG_DAEMON);
         setlogmask(LOG_UPTO(level));
