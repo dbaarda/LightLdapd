@@ -96,4 +96,46 @@ ldap_status_t ldap_reply_respond(ldap_reply *reply);
 #define ENTRY ldap_reply
 #include "dlist.h"
 
+/** Initialize an LDAPMessage and set its msgid. */
+#define LDAPMessage_init(msg, msgid) do { memset(msg, 0, sizeof(*msg)); msg->messageID = msgid; } while(0)
+
+/** Destroy an LDAPMessage freeing its contents only. */
+#define LDAPMessage_done(msg) ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_LDAPMessage, msg)
+
+/** Destroy and free an LDAPMessage instance. */
+#define LDAPMessage_free(msg) ASN_STRUCT_FREE(asn_DEF_LDAPMessage, msg)
+
+/** Get the string msg type name. */
+#define LDAPMessage_name(m) asn_DEF_LDAPMessage.elements[1].type->elements[(m)->protocolOp.present - 1].name
+
+/* LDAPString methods. */
+#define LDAPString_new(s) OCTET_STRING_new_fromBuf(&asn_DEF_LDAPString, (s), -1)
+#define LDAPString_set(str, s) OCTET_STRING_fromString((str), (s));
+
+/* LDAP debug trace output. */
+#ifdef DEBUG
+#define LDAP_DEBUG(msg) asn_fprint(stdout, &asn_DEF_LDAPMessage, msg)
+#else
+#define LDAP_DEBUG(msg)
+#endif
+
+/* Logging macros for connections. */
+#define lcwarn(c, f, ...) lwarn("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
+#define lcwarnx(c, f, ...) lwarnx("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
+#define lcnote(c, f, ...) lnote("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
+#define lcinfo(c, f, ...) linfo("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
+#define lcdebug(c, f, ...) ldebug("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
+
+/* Logging macros for requests. */
+#define lrwarn(r, f, ...) lcwarn((r)->connection, "%ld:%s "f, (r)->message->messageID, \
+                                 LDAPMessage_name((r)->message), ##__VA_ARGS__)
+#define lrwarnx(r, f, ...) lcwarnx((r)->connection, "%ld:%s "f, (r)->message->messageID, \
+                                   LDAPMessage_name((r)->message), ##__VA_ARGS__)
+#define lrnote(r, f, ...) lcnote((r)->connection, "%ld:%s "f, (r)->message->messageID, \
+                                 LDAPMessage_name((r)->message), ##__VA_ARGS__)
+#define lrinfo(r, f, ...) lcinfo((r)->connection, "%ld:%s "f, (r)->message->messageID, \
+                                 LDAPMessage_name((r)->message), ##__VA_ARGS__)
+#define lrdebug(r, f, ...) lcdebug((r)->connection, "%ld:%s "f, (r)->message->messageID, \
+                                   LDAPMessage_name((r)->message), ##__VA_ARGS__)
+
 #endif                          /* LIGHTLDAPD_LDAP_SERVER_H */

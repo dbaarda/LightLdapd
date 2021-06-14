@@ -101,10 +101,13 @@ void ldap_request_bind_pam(ldap_request *request)
         char *pw = (char *)req->authentication.choice.simple.buf;
         char status[PAMMSG_LEN] = "";
         if (server->ssl && !connection->ssl) {
+            lrwarnx(request, "bind attempt without ssl");
             resp->resultCode = BindResponse__resultCode_confidentialityRequired;
         } else if (!dn2name(server->basedn, (const char *)req->name.buf, user)) {
+            lrwarnx(request, "bind attempt with bad DN: %s", req->name.buf);
             resp->resultCode = BindResponse__resultCode_invalidDNSyntax;
         } else if (PAM_SUCCESS != auth_user(user, pw, status, &connection->delay)) {
+            lrwarnx(request, "bind attempt failed auth: %s", status);
             resp->resultCode = BindResponse__resultCode_invalidCredentials;
             LDAPString_set(&resp->diagnosticMessage, status);
         } else {                /* Success! */
@@ -113,6 +116,7 @@ void ldap_request_bind_pam(ldap_request *request)
         }
     } else {
         /* sasl auth */
+        lrwarnx(request, "bind attempt using unsupported sasl");
         resp->resultCode = BindResponse__resultCode_authMethodNotSupported;
     }
 }

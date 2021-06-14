@@ -17,12 +17,6 @@ void delay_cb(EV_P_ ev_timer *w, int revents);
 void handshake_cb(ev_loop *loop, ev_io *watcher, int revents);
 void goodbye_cb(ev_loop *loop, ev_io *watcher, int revents);
 
-const char *LDAPMessageName(LDAPMessage_t *msg)
-{
-    /* TODO: this is pretty terrible. */
-    return asn_DEF_LDAPMessage.elements[1].type->elements[msg->protocolOp.present - 1].name;
-}
-
 int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const char *rootuser, const bool anonok,
                      const char *crtpath, const char *caspath, const char *keypath, const ldap_ranges *uids,
                      const ldap_ranges *gids)
@@ -67,7 +61,6 @@ ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context so
 {
     ldap_connection *connection = XNEW0(ldap_connection, 1);
 
-    lnote("connection %p from %s", connection, ip);
     connection->server = server;
     connection->socket = socket;
     strcpy(connection->client_ip, ip);
@@ -85,12 +78,13 @@ ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context so
     buffer_init(&connection->send_buf);
     connection->ssl = NULL;
     ev_io_start(server->loop, &connection->read_watcher);
+    lcnote(connection, "new connection");
     return connection;
 }
 
 void ldap_connection_free(ldap_connection *connection)
 {
-    lnote("disconnect %p from %s", connection, connection->client_ip);
+    lcnote(connection, "disconnected");
     ev_io_stop(connection->server->loop, &connection->read_watcher);
     ev_io_stop(connection->server->loop, &connection->write_watcher);
     ev_timer_stop(connection->server->loop, &connection->delay_watcher);
@@ -135,25 +129,25 @@ void ldap_connection_respond(ldap_connection *connection)
             break;
         case LDAPMessage__protocolOp_PR_unbindRequest:
             /* For unbindRequest, close the connection. */
-            linfo("unbind request %ld on connection %p", (*msg)->messageID, connection);
+            lcinfo(connection, "%ld:%s unbind request", (*msg)->messageID, LDAPMessage_name(*msg));
             return ldap_connection_close(connection);
         default:
             /* For unknown, close the connection. */
-            lwarn("unknown request %ld on connection %p", (*msg)->messageID, connection);
+            lcwarnx(connection, "%ld:%s unknown request", (*msg)->messageID, LDAPMessage_name(*msg));
             return ldap_connection_close(connection);
         }
         *msg = NULL;
     }
-    /* If we got an error recieving messages, close the connection. */
+    /* If we got an error receiving messages, close the connection. */
     if (status == RC_FAIL) {
-        lwarn("failure recieving message on connection %p", connection);
+        lcwarn(connection, "failure receiving message");
         return ldap_connection_close(connection);
     }
     /* While there's a request and we are not blocked, respond to the request. */
     while (connection->request && (status = ldap_request_respond(connection->request)) == RC_OK) ;
     /* If we got an error sending messages, close the connection. */
     if (status == RC_FAIL) {
-        lwarn("failure sending message on connection %p", connection);
+        lcwarn(connection, "failure sending message");
         return ldap_connection_close(connection);
     }
     /* Update the state of all the connection watchers. */
@@ -355,6 +349,7 @@ ldap_request *ldap_request_new(ldap_connection *connection, LDAPMessage_t *msg)
     request->count = 0;
     /* Add the request to the connection's circular dlist. */
     ldap_request_add(&connection->request, request);
+    lrinfo(request, "new request");
     return request;
 }
 
@@ -362,10 +357,9 @@ ldap_request *ldap_request_new(ldap_connection *connection, LDAPMessage_t *msg)
 void ldap_request_free(ldap_request *request)
 {
     if (request) {
+        lrinfo(request, "completed");
         /* Remove the request from the connection's circular dlist. */
-        ldap_connection *connection = request->connection;
-        linfo("completed request %ld on connection %p", request->message->messageID, connection);
-        ldap_request_rem(&connection->request, request);
+        ldap_request_rem(&request->connection->request, request);
         LDAPMessage_free(request->message);
         while (request->reply)
             ldap_reply_free(request->reply);
@@ -379,7 +373,6 @@ ldap_request *ldap_request_bind(ldap_connection *connection, LDAPMessage_t *msg)
     assert(msg->protocolOp.present == LDAPMessage__protocolOp_PR_bindRequest);
     ldap_request *request = ldap_request_new(connection, msg);
 
-    linfo("bind request %ld on connection %p", msg->messageID, connection);
     ldap_request_bind_pam(request);
     return request;
 }
@@ -390,7 +383,6 @@ ldap_request *ldap_request_search(ldap_connection *connection, LDAPMessage_t *ms
     assert(msg->protocolOp.present == LDAPMessage__protocolOp_PR_searchRequest);
     ldap_request *request = ldap_request_new(connection, msg);
 
-    linfo("search request %ld on connection %p", msg->messageID, connection);
     ldap_request_search_nss(request);
     return request;
 }
@@ -410,7 +402,7 @@ ldap_request *ldap_request_extended(ldap_connection *connection, LDAPMessage_t *
     reply->message.protocolOp.present = LDAPMessage__protocolOp_PR_extendedResp;
     LDAPString_set(&res->matchedDN, server->basedn);
     if (!strcmp((char *)req->requestName.buf, LDAPOID_StartTLS)) {
-        linfo("startTLS extended request %ld on connection %p", msg->messageID, connection);
+        lrinfo(request, "startTLS extended request");
         res->responseName = LDAPString_new(LDAPOID_StartTLS);
         if (server->ssl) {
             res->resultCode = ExtendedResponse__resultCode_success;
@@ -423,7 +415,7 @@ ldap_request *ldap_request_extended(ldap_connection *connection, LDAPMessage_t *
             LDAPString_set(&res->diagnosticMessage, "TLS not enabled.");
         }
     } else {
-        linfo("unknown extended request %ld on connection %p", msg->messageID, connection);
+        lrinfo(request, "unknown extended request %s", req->requestName.buf);
         res->resultCode = ExtendedResponse__resultCode_protocolError;
         LDAPString_set(&res->diagnosticMessage, "Unknown extended operation.");
     }
@@ -439,7 +431,7 @@ void ldap_request_abandon(ldap_connection *connection, LDAPMessage_t *msg)
     ldap_request *e;
     MessageID_t msgid = msg->messageID;
 
-    linfo("abandon request %ld on connection %p", msgid, connection);
+    lcinfo(connection, "%ld:%s abandon request", msg->messageID, LDAPMessage_name(msg));
     /* Consume the message like we do for other request types. */
     LDAPMessage_free(msg);
     for (e = l; e; e = ldap_request_next(&l, e))
@@ -497,8 +489,7 @@ ldap_status_t ldap_reply_respond(ldap_reply *reply)
 
     /* If the message was sent, we are done. */
     if (status == RC_OK) {
-        ldebug("reply %s sent for request %ld on connection %p", LDAPMessageName(&reply->message),
-               request->message->messageID, connection);
+        lrdebug(request, "%s reply sent", LDAPMessage_name(&reply->message));
         ldap_reply_free(reply);
     }
     return status;
