@@ -7,19 +7,19 @@
 /* openlog() stub function for testing. */
 void openlog(const char *ident, int option, int facility)
 {
-    printf("openlog(\"%s\", %#x, %d)\n", ident, option, facility);
+    printf("log_test: openlog(\"%s\", %#x, %d)\n", ident, option, facility);
 }
 
 /* syslog() stub function for testing. */
 void syslog(int priority, const char *format, ...)
 {
-    printf("syslog(%d, \"%s\", ...)\n", priority, format);
+    printf("log_test: syslog(%d, \"%s\", ...)\n", priority, format);
 }
 
 /* setlogmask() stub function for testing. */
 int setlogmask(int mask)
 {
-    printf("setlogmask(%#x)\n", mask);
+    printf("log_test: setlogmask(%#x)\n", mask);
     return LOG_UPTO(LOG_DEBUG);
 }
 
