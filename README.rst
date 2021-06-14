@@ -133,6 +133,8 @@ Options
 -G gids  Optional comma-separated list of gids or gid-ranges to export
   (default: "100,1000-29999").
 -N  Use NSS and crypt for authenticating instead of PAM.
+-L loglevel  Optional syslog logging level 1-7, larger means more logging
+  (default: 4).
 
 Note lightldapd must run as root to open the default ldap serving
 port, but using ``-u runuser`` it will use setuid() to drop root

@@ -27,6 +27,7 @@ char *setting_caspath = NULL;
 char *setting_keypath = NULL;
 char *setting_uids = "1000-29999";
 char *setting_gids = "100,1000-29999";
+char *setting_loglevel = "4";
 void settings(int argc, char **argv);
 
 int main(int argc, char **argv)
@@ -37,12 +38,14 @@ int main(int argc, char **argv)
     char *server_addr;
     uid_t runuid;
     ldap_ranges uids, gids;
+    int loglevel;
 
     settings(argc, argv);
-    log_init("lightldapd", setting_daemon, LOG_DEBUG);
-    lwarnx("lightldapd starting");
     server_addr = setting_loopback ? "127.0.0.1" : NULL;
     runuid = name2uid(setting_runuser);
+    loglevel = atoi(setting_loglevel);
+    if (loglevel < LOG_ALERT || loglevel > LOG_DEBUG)
+        lerrx(EX_USAGE, "Invalid -L loglevel value: \"%s\"", setting_loglevel);
     if (!ldap_ranges_init(&uids, setting_uids))
         lerrx(EX_USAGE, "Invalid -U value: \"%s\"", setting_uids);
     if (!ldap_ranges_init(&gids, setting_gids))
@@ -53,6 +56,8 @@ int main(int argc, char **argv)
         lerr(1, "ldap_server_init() failed");
     if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
         lerr(1, "mbdedtls_net_bind() failed");
+    log_init("lightldapd", setting_daemon, loglevel);
+    lwarnx("lightldapd starting");
     if (setting_daemon && daemon(1, 0))
         lerr(1, "daemon() failed");
     if (setting_chroot && chroot(setting_chroot))
@@ -73,7 +78,7 @@ void settings(int argc, char **argv)
 {
     int c;
 
-    while ((c = getopt(argc, argv, "ab:dlp:r:u:A:C:G:K:NR:U:")) != -1) {
+    while ((c = getopt(argc, argv, "ab:dlp:r:u:A:C:G:K:L:NR:U:")) != -1) {
         switch (c) {
         case 'a':
             setting_anonok = true;
@@ -108,6 +113,9 @@ void settings(int argc, char **argv)
         case 'K':
             setting_keypath = optarg;
             break;
+        case 'L':
+            setting_loglevel = optarg;
+            break;
         case 'N':
             setting_authnss = true;
             break;
@@ -121,7 +129,7 @@ void settings(int argc, char **argv)
             fprintf(stderr,
                     "Usage: %s [-a] [-b dc=lightldapd] [-r rootuser] [-l] [-p 389] [-d] \\\n"
                     "  [-u runuser] [-R chroot] [-C crtfile] [-A ca-file] [-K keyfile] \\\n"
-                    "  [-U 1000-29999,...] [-G 100,1000-29999,...] [-N]", argv[0]);
+                    "  [-U 1000-29999,...] [-G 100,1000-29999,...] [-N] [-L loglevel]", argv[0]);
             exit(EX_USAGE);
         }
     }
