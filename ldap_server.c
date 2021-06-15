@@ -42,6 +42,7 @@ void ldap_server_start(ldap_server *server, mbedtls_net_context socket)
 {
     assert(!ev_is_active(&server->connection_watcher));
 
+    lwarnx("server starting");
     /* We set rootuid here so it is resolved inside any chroot. */
     server->rootuid = name2uid(server->rootuser);
     server->socket = socket;
@@ -53,6 +54,7 @@ void ldap_server_stop(ldap_server *server)
 {
     assert(ev_is_active(&server->connection_watcher));
 
+    lwarnx("server stopping");
     ev_io_stop(server->loop, &server->connection_watcher);
     mbedtls_net_free(&server->socket);
 }

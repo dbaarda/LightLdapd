@@ -57,7 +57,6 @@ int main(int argc, char **argv)
     if (mbedtls_net_bind(&socket, server_addr, setting_port, MBEDTLS_NET_PROTO_TCP))
         lerr(1, "mbdedtls_net_bind() failed");
     log_init("lightldapd", setting_daemon, loglevel);
-    lwarnx("lightldapd starting");
     if (setting_daemon && daemon(1, 0))
         lerr(1, "daemon() failed");
     if (setting_chroot && chroot(setting_chroot))
@@ -70,7 +69,6 @@ int main(int argc, char **argv)
         auth_user = auth_nss;
     ldap_server_start(&server, socket);
     ev_run(loop, 0);
-    lwarnx("lightldapd stopping");
     return 0;
 }
 
