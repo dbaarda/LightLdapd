@@ -107,7 +107,7 @@ void ldap_request_bind_pam(ldap_request *request)
             lrwarnx(request, "bad DN: %s", req->name.buf);
             resp->resultCode = BindResponse__resultCode_invalidDNSyntax;
         } else if (PAM_SUCCESS != auth_user(user, pw, status, &connection->delay)) {
-            lrwarnx(request, "failed auth: %s", status);
+            lrwarnx(request, "%s", status);
             resp->resultCode = BindResponse__resultCode_invalidCredentials;
             LDAPString_set(&resp->diagnosticMessage, status);
         } else {                /* Success! */
