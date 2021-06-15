@@ -33,6 +33,10 @@ typedef struct {
     ev_loop *loop;              /**< The libev loop to use. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
     mbedtls_ssl_server *ssl;    /**< The mbedtls ssl server config. */
+    unsigned int cxn_opened_c;  /**< Connections opened counter. */
+    unsigned int cxn_closed_c;  /**< Connections closed counter. */
+    unsigned int msg_send_c;    /**< Messages sent counter. */
+    unsigned int msg_recv_c;    /**< Messages revieved counter. */
 } ldap_server;
 int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, const char *rootuser, const bool anonok,
                      const char *crtpath, const char *caspath, const char *keypath, const ldap_ranges *uids,
@@ -46,6 +50,7 @@ typedef enum asn_dec_rval_code_e ldap_status_t;
 /** The ldap_connection class. */
 typedef struct {
     ldap_server *server;        /**< The server for this connection. */
+    unsigned int id;            /**< The id number for this connection. */
     mbedtls_net_context socket; /**< The mbedtls client socket used. */
     char client_ip[INET6_ADDRSTRLEN];   /**< The client ip address. */
     uid_t binduid;              /**< The uid the client binded to. */
@@ -120,11 +125,11 @@ ldap_status_t ldap_reply_respond(ldap_reply *reply);
 #endif
 
 /* Logging macros for connections. */
-#define lcwarn(c, f, ...) lwarn("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
-#define lcwarnx(c, f, ...) lwarnx("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
-#define lcnote(c, f, ...) lnote("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
-#define lcinfo(c, f, ...) linfo("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
-#define lcdebug(c, f, ...) ldebug("%p:%s "f, (c), (c)->client_ip, ##__VA_ARGS__)
+#define lcwarn(c, f, ...) lwarn("%u:%s "f, (c)->id, (c)->client_ip, ##__VA_ARGS__)
+#define lcwarnx(c, f, ...) lwarnx("%u:%s "f, (c)->id, (c)->client_ip, ##__VA_ARGS__)
+#define lcnote(c, f, ...) lnote("%u:%s "f, (c)->id, (c)->client_ip, ##__VA_ARGS__)
+#define lcinfo(c, f, ...) linfo("%u:%s "f, (c)->id, (c)->client_ip, ##__VA_ARGS__)
+#define lcdebug(c, f, ...) ldebug("%u:%s "f, (c)->id, (c)->client_ip, ##__VA_ARGS__)
 
 /* Logging macros for requests. */
 #define lrwarn(r, f, ...) lcwarn((r)->connection, "%ld:%s "f, (r)->message->messageID, \

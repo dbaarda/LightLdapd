@@ -33,6 +33,10 @@ int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, con
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
     server->ssl = NULL;
+    server->cxn_opened_c = 0;
+    server->cxn_closed_c = 0;
+    server->msg_send_c = 0;
+    server->msg_recv_c = 0;
     if (crtpath && !(server->ssl = mbedtls_ssl_server_new(crtpath, caspath, keypath)))
         return 1;
     return 0;
@@ -64,6 +68,7 @@ ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context so
     ldap_connection *connection = XNEW0(ldap_connection, 1);
 
     connection->server = server;
+    connection->id = ++server->cxn_opened_c;
     connection->socket = socket;
     strcpy(connection->client_ip, ip);
     connection->binduid = (uid_t)(-1);
@@ -95,6 +100,7 @@ void ldap_connection_free(ldap_connection *connection)
     while (connection->request)
         ldap_request_free(connection->request);
     mbedtls_ssl_connection_free(connection->ssl);
+    connection->server->cxn_closed_c++;
     free(connection);
 }
 
@@ -175,11 +181,13 @@ ldap_status_t ldap_connection_send(ldap_connection *connection, LDAPMessage_t *m
     /* Send nothing if connection is delayed. */
     if (connection->delay)
         return RC_WMORE;
+    /* from asn1c's FAQ: If you want BER or DER encoding, use der_encode(). */
     rencode = der_encode_to_buffer(&asn_DEF_LDAPMessage, msg, buffer_wpos(buf), buffer_wlen(buf));
     /* If it failed the buffer was full, return RC_WMORE to try again. */
     if (rencode.encoded == -1)
         return RC_WMORE;
     buffer_fill(buf, rencode.encoded);
+    connection->server->msg_send_c++;
     LDAP_DEBUG(msg);
     return RC_OK;
 }
@@ -192,12 +200,12 @@ ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **
     /* Recv nothing if connection is delayed. */
     if (connection->delay)
         return RC_WMORE;
-    /* from asn1c's FAQ: If you want BER or DER encoding, use der_encode(). */
     rdecode = ber_decode(0, &asn_DEF_LDAPMessage, (void **)msg, buffer_rpos(buf), buffer_rlen(buf));
     buffer_toss(buf, rdecode.consumed);
     if (rdecode.code == RC_FAIL) {
         fail1("ber_decode", RC_FAIL);
     } else if (rdecode.code == RC_OK) {
+        connection->server->msg_recv_c++;
         LDAP_DEBUG(*msg);
     }
     return rdecode.code;
