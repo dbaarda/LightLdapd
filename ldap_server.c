@@ -52,6 +52,9 @@ int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, con
 
 void ldap_server_start(ldap_server *server, mbedtls_net_context socket)
 {
+    assert(!ev_is_active(&server->sighup_watcher));
+    assert(!ev_is_active(&server->sigint_watcher));
+    assert(!ev_is_active(&server->sigterm_watcher));
     assert(!ev_is_active(&server->connection_watcher));
 
     lwarnx("server starting");
@@ -67,6 +70,9 @@ void ldap_server_start(ldap_server *server, mbedtls_net_context socket)
 
 void ldap_server_stop(ldap_server *server)
 {
+    assert(ev_is_active(&server->sighup_watcher));
+    assert(ev_is_active(&server->sigint_watcher));
+    assert(ev_is_active(&server->sigterm_watcher));
     assert(ev_is_active(&server->connection_watcher));
 
     lwarnx("server stopping");
