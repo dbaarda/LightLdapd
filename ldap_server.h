@@ -31,6 +31,9 @@ typedef struct {
     const ldap_ranges *uids;    /**< The ranges of uids exported. */
     const ldap_ranges *gids;    /**< The ranges of gids exported. */
     ev_loop *loop;              /**< The libev loop to use. */
+    ev_signal sighup_watcher;   /**< The SIGHUP watcher. */
+    ev_signal sigint_watcher;   /**< The SIGINT watcher. */
+    ev_signal sigterm_watcher;  /**< The SIGTERM watcher. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
     mbedtls_ssl_server *ssl;    /**< The mbedtls ssl server config. */
     unsigned int cxn_opened_c;  /**< Connections opened counter. */

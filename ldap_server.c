@@ -10,6 +10,8 @@
 
 static const char *LDAPOID_StartTLS = "1.3.6.1.4.1.1466.20037";
 
+void sighup_cb(ev_loop *loop, ev_signal *watcher, int revents);
+void sigterm_cb(ev_loop *loop, ev_signal *watcher, int revents);
 void accept_cb(ev_loop *loop, ev_io *watcher, int revents);
 void read_cb(ev_loop *loop, ev_io *watcher, int revents);
 void write_cb(ev_loop *loop, ev_io *watcher, int revents);
@@ -30,6 +32,12 @@ int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, con
     server->uids = uids;
     server->gids = gids;
     server->loop = loop;
+    ev_signal_init(&server->sighup_watcher, sighup_cb, SIGHUP);
+    server->sighup_watcher.data = server;
+    ev_signal_init(&server->sigint_watcher, sigterm_cb, SIGINT);
+    server->sigint_watcher.data = server;
+    ev_signal_init(&server->sigterm_watcher, sigterm_cb, SIGTERM);
+    server->sigterm_watcher.data = server;
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
     server->ssl = NULL;
@@ -52,6 +60,9 @@ void ldap_server_start(ldap_server *server, mbedtls_net_context socket)
     server->socket = socket;
     ev_io_set(&server->connection_watcher, socket.fd, EV_READ);
     ev_io_start(server->loop, &server->connection_watcher);
+    ev_signal_start(server->loop, &server->sighup_watcher);
+    ev_signal_start(server->loop, &server->sigint_watcher);
+    ev_signal_start(server->loop, &server->sigterm_watcher);
 }
 
 void ldap_server_stop(ldap_server *server)
@@ -59,6 +70,9 @@ void ldap_server_stop(ldap_server *server)
     assert(ev_is_active(&server->connection_watcher));
 
     lwarnx("server stopping");
+    ev_signal_stop(server->loop, &server->sighup_watcher);
+    ev_signal_stop(server->loop, &server->sigint_watcher);
+    ev_signal_stop(server->loop, &server->sigterm_watcher);
     ev_io_stop(server->loop, &server->connection_watcher);
     mbedtls_net_free(&server->socket);
 }
@@ -209,6 +223,27 @@ ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **
         LDAP_DEBUG(*msg);
     }
     return rdecode.code;
+}
+
+void sighup_cb(ev_loop *loop, ev_signal *watcher, int revents)
+{
+    ldap_server *server = watcher->data;
+    assert(server->loop == loop);
+    assert(&server->sighup_watcher == watcher);
+    assert(revents == EV_SIGNAL);
+
+    lnote("SIGHUP received, reloading conf... oh wait, never mind.");
+}
+
+void sigterm_cb(ev_loop *loop, ev_signal *watcher, int revents)
+{
+    ldap_server *server = watcher->data;
+    assert(server->loop == loop);
+    assert(&server->sigint_watcher == watcher || &server->sigterm_watcher == watcher);
+    assert(revents == EV_SIGNAL);
+
+    lnote("SIGTERM received, shutting down.");
+    ldap_server_stop(server);
 }
 
 void accept_cb(ev_loop *loop, ev_io *watcher, int revents)
