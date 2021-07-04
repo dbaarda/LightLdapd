@@ -18,6 +18,7 @@
 #include <arpa/inet.h>
 
 /* Pre-declare types needed for forward referencing. */
+typedef struct ldap_connection ldap_connection;
 typedef struct ldap_request ldap_request;
 typedef struct ldap_reply ldap_reply;
 
@@ -36,6 +37,8 @@ typedef struct {
     ev_signal sigterm_watcher;  /**< The SIGTERM watcher. */
     ev_io connection_watcher;   /**< The libev incoming connection watcher. */
     mbedtls_ssl_server *ssl;    /**< The mbedtls ssl server config. */
+    ldap_connection *connection;        /**< The circular dlist of
+                                         * connections. */
     unsigned int cxn_opened_c;  /**< Connections opened counter. */
     unsigned int cxn_closed_c;  /**< Connections closed counter. */
     unsigned int msg_send_c;    /**< Messages sent counter. */
@@ -51,7 +54,8 @@ void ldap_server_stop(ldap_server *server);
 typedef enum asn_dec_rval_code_e ldap_status_t;
 
 /** The ldap_connection class. */
-typedef struct {
+struct ldap_connection {
+    ldap_connection *next, *prev;       /**< The circular dlist pointers. */
     ldap_server *server;        /**< The server for this connection. */
     unsigned int id;            /**< The id number for this connection. */
     mbedtls_net_context socket; /**< The mbedtls client socket used. */
@@ -66,13 +70,15 @@ typedef struct {
     buffer_t recv_buf;          /**< The buffer for incoming data. */
     buffer_t send_buf;          /**< The buffer for outgoing data. */
     mbedtls_ssl_context *ssl;   /**< The mbedtls ssl context. */
-} ldap_connection;
+};
 ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context socket, const char *ip);
 void ldap_connection_free(ldap_connection *connection);
 void ldap_connection_close(ldap_connection *connection);
 void ldap_connection_respond(ldap_connection *connection);
 ldap_status_t ldap_connection_send(ldap_connection *connection, LDAPMessage_t *msg);
 ldap_status_t ldap_connection_recv(ldap_connection *connection, LDAPMessage_t **msg);
+#define ENTRY ldap_connection
+#include "dlist.h"
 
 /** The ldap_request class. */
 struct ldap_request {

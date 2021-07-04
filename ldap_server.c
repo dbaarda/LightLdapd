@@ -41,6 +41,7 @@ int ldap_server_init(ldap_server *server, ev_loop *loop, const char *basedn, con
     ev_init(&server->connection_watcher, accept_cb);
     server->connection_watcher.data = server;
     server->ssl = NULL;
+    server->connection = NULL;
     server->cxn_opened_c = 0;
     server->cxn_closed_c = 0;
     server->msg_send_c = 0;
@@ -76,6 +77,9 @@ void ldap_server_stop(ldap_server *server)
     assert(ev_is_active(&server->connection_watcher));
 
     lwarnx("server stopping");
+    /* Close all the connections. */
+    for (ldap_connection *c = server->connection; c; c = ldap_connection_next(&server->connection, c))
+        ldap_connection_close(c);
     ev_signal_stop(server->loop, &server->sighup_watcher);
     ev_signal_stop(server->loop, &server->sigint_watcher);
     ev_signal_stop(server->loop, &server->sigterm_watcher);
@@ -104,6 +108,8 @@ ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context so
     buffer_init(&connection->recv_buf);
     buffer_init(&connection->send_buf);
     connection->ssl = NULL;
+    /* Add the connection to the server's circular dlist. */
+    ldap_connection_add(&server->connection, connection);
     ev_io_start(server->loop, &connection->read_watcher);
     lcnote(connection, "new connection");
     return connection;
@@ -111,16 +117,20 @@ ldap_connection *ldap_connection_new(ldap_server *server, mbedtls_net_context so
 
 void ldap_connection_free(ldap_connection *connection)
 {
+    ldap_server *server = connection->server;
+
     lcnote(connection, "disconnected");
-    ev_io_stop(connection->server->loop, &connection->read_watcher);
-    ev_io_stop(connection->server->loop, &connection->write_watcher);
-    ev_timer_stop(connection->server->loop, &connection->delay_watcher);
+    /* Remove the connection from the server's circular dlist. */
+    ldap_connection_rem(&server->connection, connection);
+    ev_io_stop(server->loop, &connection->read_watcher);
+    ev_io_stop(server->loop, &connection->write_watcher);
+    ev_timer_stop(server->loop, &connection->delay_watcher);
     mbedtls_net_free(&connection->socket);
     LDAPMessage_free(connection->recv_msg);
     while (connection->request)
         ldap_request_free(connection->request);
     mbedtls_ssl_connection_free(connection->ssl);
-    connection->server->cxn_closed_c++;
+    server->cxn_closed_c++;
     free(connection);
 }
 
@@ -478,16 +488,14 @@ void ldap_request_abandon(ldap_connection *connection, LDAPMessage_t *msg)
 {
     assert(connection);
     assert(msg);
-    ldap_request *l = connection->request;
-    ldap_request *e;
     MessageID_t msgid = msg->messageID;
 
     lcinfo(connection, "%ld:%s abandon request", msg->messageID, LDAPMessage_name(msg));
     /* Consume the message like we do for other request types. */
     LDAPMessage_free(msg);
-    for (e = l; e; e = ldap_request_next(&l, e))
-        if (e->message->messageID == msgid)
-            return ldap_request_free(e);
+    for (ldap_request r = connection->request; r; r = ldap_request_next(&connection->request, r))
+        if (r->message->messageID == msgid)
+            return ldap_request_free(r);
 }
 
 /* Process a single reply for an ldap_response. */
